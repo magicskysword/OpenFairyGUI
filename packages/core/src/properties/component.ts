@@ -4,6 +4,7 @@ import { ExtensibleProperty, type IExtensibleProperty } from './extensible-prope
 import type { GObject } from './g-object.js';
 import type { Controller } from './controller.js';
 import type { Transition } from './transition.js';
+import { generateChildId as generateChildIdValue } from '../utils/id-utils.js';
 
 interface XYLike {
 	x: number;
@@ -384,12 +385,143 @@ export class Component extends ExtensibleProperty<IComponent> {
 	public removeChild(child: GObject): this { return this.removeRef('displayList', child); }
 	public listChildren(): GObject[] { return this.listRefs('displayList'); }
 
+	/**
+	 * Inserts a child at an explicit display-list index.
+	 *
+	 * The operation validates the complete result before mutating the graph.
+	 */
+	public insertChild(child: GObject, index: number): this {
+		const children = this.listChildren();
+		this._assertIndex(index, 0, children.length, 'insert');
+		if (children.includes(child)) {
+			throw new Error(`Child "${child.getId()}" already belongs to component "${this.getName()}".`);
+		}
+
+		const next = [...children];
+		next.splice(index, 0, child);
+		this._assertUniqueChildIds(next);
+		return this._replaceDisplayList(next);
+	}
+
+	/**
+	 * Moves an existing child to a final display-list index.
+	 */
+	public moveChild(child: GObject, index: number): this {
+		const children = this.listChildren();
+		const currentIndex = this._childIndex(children, child);
+		this._assertIndex(index, 0, children.length - 1, 'move');
+		if (currentIndex === index) return this;
+
+		const next = [...children];
+		next.splice(currentIndex, 1);
+		next.splice(index, 0, child);
+		this._assertUniqueChildIds(next);
+		return this._replaceDisplayList(next);
+	}
+
+	/** Swaps the positions of two existing display-list children. */
+	public swapChildren(first: GObject, second: GObject): this {
+		const children = this.listChildren();
+		const firstIndex = this._childIndex(children, first);
+		const secondIndex = this._childIndex(children, second);
+		if (firstIndex === secondIndex) return this;
+
+		const next = [...children];
+		next[firstIndex] = second;
+		next[secondIndex] = first;
+		this._assertUniqueChildIds(next);
+		return this._replaceDisplayList(next);
+	}
+
+	/**
+	 * Reorders children using an exact permutation of their stable IDs.
+	 */
+	public setChildrenOrder(childIds: string[]): this {
+		const children = this.listChildren();
+		if (childIds.length !== children.length) {
+			throw new Error(
+				`Child order must contain exactly ${children.length} ids; received ${childIds.length}.`,
+			);
+		}
+
+		const duplicateIds = childIds.filter((id, index) => childIds.indexOf(id) !== index);
+		if (duplicateIds.length > 0) {
+			throw new Error(`Child order contains duplicate child id "${duplicateIds[0]}".`);
+		}
+
+		this._assertUniqueChildIds(children);
+		const byId = new Map(children.map((child) => [child.getId(), child]));
+		const next = childIds.map((id) => {
+			const child = byId.get(id);
+			if (!child) throw new Error(`Child order contains unknown child id "${id}".`);
+			return child;
+		});
+		return this._replaceDisplayList(next);
+	}
+
+	/** Replaces an existing child while preserving its display-list index. */
+	public replaceChild(previous: GObject, nextChild: GObject): this {
+		const children = this.listChildren();
+		const index = this._childIndex(children, previous);
+		if (previous === nextChild) return this;
+		if (children.includes(nextChild)) {
+			throw new Error(`Child "${nextChild.getId()}" already belongs to component "${this.getName()}".`);
+		}
+
+		const next = [...children];
+		next[index] = nextChild;
+		this._assertUniqueChildIds(next);
+		return this._replaceDisplayList(next);
+	}
+
+	/** Allocates the next `n<decimal>` ID without modifying the component. */
+	public generateChildId(): string {
+		return generateChildIdValue(this.listChildren().map((child) => child.getId()));
+	}
+
 	public getChild(name: string): GObject | null {
 		return this.listChildren().find((child) => child.getName() === name) || null;
 	}
 
 	public getChildById(id: string): GObject | null {
 		return this.listChildren().find((child) => child.getId() === id) || null;
+	}
+
+	private _childIndex(children: GObject[], child: GObject): number {
+		const index = children.indexOf(child);
+		if (index < 0) {
+			throw new Error(`Child "${child.getId()}" does not belong to component "${this.getName()}".`);
+		}
+		return index;
+	}
+
+	private _assertIndex(index: number, min: number, max: number, operation: string): void {
+		if (!Number.isSafeInteger(index) || index < min || index > max) {
+			throw new RangeError(
+				`Display-list ${operation} index must be a safe integer between ${min} and ${max}; received ${index}.`,
+			);
+		}
+	}
+
+	private _assertUniqueChildIds(children: GObject[]): void {
+		const seen = new Set<string>();
+		for (const child of children) {
+			const id = child.getId();
+			if (seen.has(id)) {
+				throw new Error(`Component display list contains duplicate child id "${id}".`);
+			}
+			seen.add(id);
+		}
+	}
+
+	private _replaceDisplayList(children: GObject[]): this {
+		for (const child of new Set(this.listChildren())) {
+			this.removeChild(child);
+		}
+		for (const child of children) {
+			this.addChild(child);
+		}
+		return this;
 	}
 
 	/****** Controllers ******/
