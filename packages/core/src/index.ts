@@ -246,6 +246,10 @@ export {
 	type ProjectReadOptions,
 	type ProjectSourceFile,
 	type ProjectWriteOptions,
+	preserveOpaqueProjectXml,
+	inspectOpaqueProjectXml,
+	type OpaqueProjectXmlKind,
+	type OpaqueXmlFinding,
 } from './io/index.js';
 
 // Types

@@ -459,6 +459,7 @@ interface ComponentXmlNode extends Record<string, unknown> {
 
 interface ProjectComponentExtras extends Record<string, unknown> {
 	_filePath?: string;
+	_sourceComponentXml?: string;
 }
 
 function appendOrderedValue(target: Record<string, unknown>, key: string, value: unknown): void {
@@ -818,6 +819,10 @@ export class ProjectReader {
 			root.setProjectId(projDesc.id ?? '');
 			root.setProjectType(this._resolveProjectType(projDesc.type ?? ''));
 			root.setVersion(projDesc.version ?? '');
+			root.setExtras({
+				...root.getExtras(),
+				_sourceProjectXml: fairyContent,
+			});
 		}
 
 		// 2. Read settings
@@ -952,6 +957,15 @@ export class ProjectReader {
 				pkg.setJpegQuality(parseInt2(jpegQuality, 0));
 			}
 		}
+		const packageExtras = pkg.getExtras();
+		const sourceXmlByBranch = {
+			...(packageExtras._sourcePackageXmlByBranch as Record<string, string> | undefined),
+			[branchName]: content,
+		};
+		pkg.setExtras({
+			...packageExtras,
+			_sourcePackageXmlByBranch: sourceXmlByBranch,
+		});
 
 		// Publish name
 		const publish = !branchName ? (desc as PackageDescriptionNode).publish : undefined;
@@ -1270,6 +1284,10 @@ export class ProjectReader {
 		const xml = parseXML(xmlContent);
 		const compNode = getXmlNode<ComponentXmlNode>(xml.component);
 		if (!compNode) return;
+		comp.setExtras({
+			...comp.getExtras(),
+			_sourceComponentXml: xmlContent,
+		});
 		const orderedDisplayItems = getOrderedDisplayListItems(xmlContent);
 
 		// fast-xml-parser may wrap in array due to isArray config
@@ -1514,6 +1532,7 @@ export class ProjectReader {
 		// Display list
 		if (orderedDisplayItems.length > 0) {
 			for (const { tagName, attrs } of orderedDisplayItems) {
+				if (!DISPLAY_TAG_MAP[tagName.toLowerCase()]) continue;
 				assertDisplayListTagAllowed(tagName, attrs, comp.getName());
 				const child = this._createDisplayObject(ctx, doc, tagName, attrs, localControllers);
 				if (child) comp.addChild(child);
@@ -1522,6 +1541,7 @@ export class ProjectReader {
 			const displayList = compNode.displayList;
 			if (displayList) {
 				for (const tagName of Object.keys(displayList)) {
+					if (!DISPLAY_TAG_MAP[tagName.toLowerCase()]) continue;
 					const items = ensureArray(displayList[tagName]);
 					for (const itemDef of items) {
 						assertDisplayListTagAllowed(tagName, itemDef, comp.getName());
