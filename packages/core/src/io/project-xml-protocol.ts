@@ -137,6 +137,10 @@ const SCALE_ATTRS = {
 	scale: { canonical: 'scale' },
 } satisfies XmlAttrMap;
 
+const SKEW_ATTRS = {
+	skew: { canonical: 'skew' },
+} satisfies XmlAttrMap;
+
 const GROUP_REF_ATTRS = {
 	group: { canonical: 'group' },
 } satisfies XmlAttrMap;
@@ -234,7 +238,6 @@ const IMAGE_PANEL_ATTRS = {
 } satisfies XmlAttrMap;
 
 const GRAPH_PANEL_ATTRS = {
-	skew: { canonical: 'skew' },
 	type: { canonical: 'type' },
 	lineSize: { canonical: 'lineSize' },
 	lineColor: { canonical: 'lineColor' },
@@ -609,6 +612,7 @@ const IMAGE_NODE = defineNode(
 		PIVOT_ATTRS,
 		ANCHOR_ATTRS,
 		SCALE_ATTRS,
+		SKEW_ATTRS,
 		GROUP_REF_ATTRS,
 		COMMON_DISPLAY_STATE_ATTRS,
 		RESOURCE_LINK_ATTRS,
@@ -624,6 +628,7 @@ const GRAPH_NODE = defineNode(
 		RESTRICT_SIZE_ATTRS,
 		PIVOT_ATTRS,
 		ANCHOR_ATTRS,
+		SKEW_ATTRS,
 		GROUP_REF_ATTRS,
 		COMMON_DISPLAY_STATE_ATTRS,
 		GRAPH_PANEL_ATTRS,
