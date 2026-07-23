@@ -1,6 +1,6 @@
 # OpenFairyGUI
 
-[![npm core version](https://img.shields.io/npm/v/@openfairygui/core.svg)](https://www.npmjs.com/package/@openfairygui/core)
+[![npm core version](https://img.shields.io/npm/v/@magicskysword/openfairygui-core.svg)](https://www.npmjs.com/package/@magicskysword/openfairygui-core)
 [![npm cli version](https://img.shields.io/npm/v/@openfairygui/cli.svg)](https://www.npmjs.com/package/@openfairygui/cli)
 [![License](https://img.shields.io/badge/license-MIT-007ec6.svg)](./LICENSE)
 [![GitHub](https://img.shields.io/badge/github-OpenFairyGUI%2FOpenFairyGUI-24292e.svg)](https://github.com/OpenFairyGUI/OpenFairyGUI)
@@ -27,8 +27,8 @@ OpenFairyGUI 用于读取、编辑、写回和发布 FairyGUI 工程数据。和
 
 | 包 | 作用 |
 |---|---|
-| `@openfairygui/core` | 属性图、文档模型、工程读写、二进制读写等底层能力 |
-| `@openfairygui/functions` | 发布、还原、检查、转换等高层函数能力 |
+| `@magicskysword/openfairygui-core` | 属性图、文档模型、工程读写、二进制读写等底层能力 |
+| `@magicskysword/openfairygui-functions` | 发布、还原、检查、转换等高层函数能力 |
 | `@openfairygui/cli` | 命令行工具 |
 | `@openfairygui/test-utils` | 测试辅助与夹具 |
 
@@ -37,14 +37,14 @@ OpenFairyGUI 用于读取、编辑、写回和发布 FairyGUI 工程数据。和
 安装脚本侧包：
 
 ```bash
-npm install --save @openfairygui/core @openfairygui/functions
+npm install --save @magicskysword/openfairygui-core @magicskysword/openfairygui-functions
 ```
 
 典型用法是先读入工程，再基于 `Document` 做变换、发布或写回：
 
 ```ts
-import { NodeIO } from '@openfairygui/core';
-import { inspect, publish } from '@openfairygui/functions';
+import { NodeIO } from '@magicskysword/openfairygui-core';
+import { inspect, publish } from '@magicskysword/openfairygui-functions';
 
 const io = new NodeIO();
 const doc = await io.readProject('./MyProject/MyProject.fairy');
@@ -60,8 +60,8 @@ await doc.transform(publish({
 如果你更关心“发布产物 -> 工程”的恢复链路，也可以直接调用 `functions` 层的 restore workflow：
 
 ```ts
-import { ProjectType } from '@openfairygui/core';
-import { restore } from '@openfairygui/functions';
+import { ProjectType } from '@magicskysword/openfairygui-core';
+import { restore } from '@magicskysword/openfairygui-functions';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 

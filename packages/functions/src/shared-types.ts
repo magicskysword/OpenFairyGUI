@@ -1,4 +1,4 @@
-import type { FileSystem, ProjectSettings, PublishSettings } from '@openfairygui/core';
+import type { FileSystem, ProjectSettings, PublishSettings } from '@magicskysword/openfairygui-core';
 
 export type ExtrasMap = Record<string, unknown>;
 

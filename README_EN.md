@@ -1,6 +1,6 @@
 # OpenFairyGUI
 
-[![npm core version](https://img.shields.io/npm/v/@openfairygui/core.svg)](https://www.npmjs.com/package/@openfairygui/core)
+[![npm core version](https://img.shields.io/npm/v/@magicskysword/openfairygui-core.svg)](https://www.npmjs.com/package/@magicskysword/openfairygui-core)
 [![npm cli version](https://img.shields.io/npm/v/@openfairygui/cli.svg)](https://www.npmjs.com/package/@openfairygui/cli)
 [![License](https://img.shields.io/badge/license-MIT-007ec6.svg)](./LICENSE)
 [![GitHub](https://img.shields.io/badge/github-OpenFairyGUI%2FOpenFairyGUI-24292e.svg)](https://github.com/OpenFairyGUI/OpenFairyGUI)
@@ -27,8 +27,8 @@ This repository is organized as a `pnpm workspace` + `Lerna` monorepo with the f
 
 | Package | Purpose |
 |---|---|
-| `@openfairygui/core` | Property graph, document model, project I/O, and binary I/O primitives |
-| `@openfairygui/functions` | Higher-level publish, restore, inspection, and transform workflows |
+| `@magicskysword/openfairygui-core` | Property graph, document model, project I/O, and binary I/O primitives |
+| `@magicskysword/openfairygui-functions` | Higher-level publish, restore, inspection, and transform workflows |
 | `@openfairygui/cli` | Command-line interface |
 | `@openfairygui/test-utils` | Shared test helpers and fixtures |
 
@@ -37,14 +37,14 @@ This repository is organized as a `pnpm workspace` + `Lerna` monorepo with the f
 Install the scripting packages:
 
 ```bash
-npm install --save @openfairygui/core @openfairygui/functions
+npm install --save @magicskysword/openfairygui-core @magicskysword/openfairygui-functions
 ```
 
 Typical usage reads a project into a `Document`, then inspects, transforms, publishes, or writes it back:
 
 ```ts
-import { NodeIO } from '@openfairygui/core';
-import { inspect, publish } from '@openfairygui/functions';
+import { NodeIO } from '@magicskysword/openfairygui-core';
+import { inspect, publish } from '@magicskysword/openfairygui-functions';
 
 const io = new NodeIO();
 const doc = await io.readProject('./MyProject/MyProject.fairy');
@@ -60,8 +60,8 @@ await doc.transform(publish({
 If you want to rebuild a project from published output, use the high-level restore workflow from `functions`:
 
 ```ts
-import { ProjectType } from '@openfairygui/core';
-import { restore } from '@openfairygui/functions';
+import { ProjectType } from '@magicskysword/openfairygui-core';
+import { restore } from '@magicskysword/openfairygui-functions';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 

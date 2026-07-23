@@ -2,7 +2,7 @@ import test from 'ava';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import os from 'node:os';
-import { NodeIO, Document } from '@openfairygui/core';
+import { NodeIO, Document } from '@magicskysword/openfairygui-core';
 import { getFixturePath, getFixtureProjectPath } from '@openfairygui/test-utils';
 import sharp from 'sharp';
 import { publish, resolvePublishOptions, type RootProjectSettings } from '../src/index.js';

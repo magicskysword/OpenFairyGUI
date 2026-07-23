@@ -1,18 +1,18 @@
-# @openfairygui/functions
+# @magicskysword/openfairygui-functions
 
-Composable authoring and publish functions built on top of `@openfairygui/core`.
+Composable authoring and publish functions built on top of `@magicskysword/openfairygui-core`.
 
 ## Install
 
 ```bash
-npm install --save @openfairygui/core @openfairygui/functions
+npm install --save @magicskysword/openfairygui-core @magicskysword/openfairygui-functions
 ```
 
 ## Usage
 
 ```ts
-import { NodeIO } from '@openfairygui/core';
-import { inspect, publish } from '@openfairygui/functions';
+import { NodeIO } from '@magicskysword/openfairygui-core';
+import { inspect, publish } from '@magicskysword/openfairygui-functions';
 
 const io = new NodeIO();
 const doc = await io.readProject('./MyProject/MyProject.fairy');

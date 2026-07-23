@@ -78,9 +78,9 @@ flowchart LR
 | 输出层 | 工程文件写回、图集产物生成、二进制封包输出与代码生成输出 | `packages/core/src/io/project-writer.ts`、`packages/functions/src/atlas.ts`、`packages/core/src/io/binary-writer.ts`、`packages/functions/src/codegen.ts` |
 
 补充说明：
-- `@openfairygui/core` 定义文档模型与协议读写能力。
+- `@magicskysword/openfairygui-core` 定义文档模型与协议读写能力。
 - `BinaryReader` 仍然是二进制读入口；component block 的展开逻辑当前拆到内部 helper `component-decoder.ts`，对外调用面不变。
-- `@openfairygui/functions` 只组合流程，不重新定义底层协议；当前 `publish` 与 `restore` 都在这里编排高层 workflow，并组合 `core` primitives。
+- `@magicskysword/openfairygui-functions` 只组合流程，不重新定义底层协议；当前 `publish` 与 `restore` 都在这里编排高层 workflow，并组合 `core` primitives。
 - 当前 Unity、Layabox、Cocos Creator 共用同一条 `publish -> atlas / binary / codegen` 主链；差异主要体现在描述文件扩展名和代码生成 lane 选择，而不是工作流分叉。
 - `@openfairygui/cli` 是入口层，不下沉协议细节。
 
@@ -209,7 +209,7 @@ flowchart TD
 
 | 模块 | 负责内容 | 不负责内容 |
 |---|---|---|
-| `@openfairygui/core` | 文档模型、属性节点、项目格式读写、二进制协议读写等底层能力 | 发布/还原策略、命令行参数封装 |
-| `@openfairygui/functions` | inspect / validate / prune / rename / atlas / publish / restore 等流程组合 | 协议定义、Property Graph 基础建模 |
+| `@magicskysword/openfairygui-core` | 文档模型、属性节点、项目格式读写、二进制协议读写等底层能力 | 发布/还原策略、命令行参数封装 |
+| `@magicskysword/openfairygui-functions` | inspect / validate / prune / rename / atlas / publish / restore 等流程组合 | 协议定义、Property Graph 基础建模 |
 | `@openfairygui/cli` | 命令入口、参数解析、调用装配 | 领域模型定义、协议定义 |
 | `@openfairygui/test-utils` | 测试辅助与夹具支持 | 生产协议与运行时流程 |

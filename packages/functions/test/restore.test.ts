@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import sharp from 'sharp';
-import { Document, NodeIO, ProjectType, parseJta } from '@openfairygui/core';
+import { Document, NodeIO, ProjectType, parseJta } from '@magicskysword/openfairygui-core';
 import { getFixturePath, getFixtureProjectPath } from '@openfairygui/test-utils';
 import { publish, restore, type PublishFileSystem, type RestoreFileSystem, type RestoreImageCropInput, type RestoreImageExtractInput } from '../src/index.js';
 

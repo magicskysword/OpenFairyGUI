@@ -2,7 +2,7 @@ import test from 'ava';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { maxRectsPack, Document } from '@openfairygui/core';
+import { maxRectsPack, Document } from '@magicskysword/openfairygui-core';
 import sharp from 'sharp';
 import { atlas } from '../src/index.js';
 

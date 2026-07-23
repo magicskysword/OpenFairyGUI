@@ -5,7 +5,7 @@
 export const VERSION: string = `v${(import.meta as Record<string, any>).env?.PACKAGE_VERSION ?? '0.0.0-dev'}`;
 
 /** @internal */
-export const NAME = '@openfairygui/core';
+export const NAME = '@magicskysword/openfairygui-core';
 
 /** Binary package file magic number: "FGUI" as uint32. */
 export const FGUI_MAGIC = 0x46475549;

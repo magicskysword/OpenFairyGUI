@@ -6,7 +6,7 @@ import {
 	ProjectType,
 	ProjectWriter,
 	type Package,
-} from '@openfairygui/core';
+} from '@magicskysword/openfairygui-core';
 
 export interface RestoreImageCropInput {
 	sourcePath: string;

@@ -1,7 +1,7 @@
 import {
 	NodeIO,
 	ProjectType,
-} from '@openfairygui/core';
+} from '@magicskysword/openfairygui-core';
 import {
 	inspect,
 	publish,
@@ -14,7 +14,7 @@ import {
 	type RestoreImageCropper,
 	type RestoreImageExtractInput,
 	type RestoreImageExtractor,
-} from '@openfairygui/functions';
+} from '@magicskysword/openfairygui-functions';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { parseArgs } from 'node:util';

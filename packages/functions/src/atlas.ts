@@ -1,4 +1,4 @@
-import { GearType, TransitionActionType, type Component, type Document, type DragonBonesResource, type FontResource, type ILogger, type ImageResource, type MovieClipResource, type Package, type SpineResource, type Transform } from '@openfairygui/core';
+import { GearType, TransitionActionType, type Component, type Document, type DragonBonesResource, type FontResource, type ILogger, type ImageResource, type MovieClipResource, type Package, type SpineResource, type Transform } from '@magicskysword/openfairygui-core';
 import { COMPAT_NODE_RECT_FLAGS, type CompatNodeRect } from './max-rects-compat.js';
 import { MaxRectsPackerCompat } from './max-rects-packer-compat.js';
 import type { ExtrasMap, HasOptionalSrc, HasOptionalUrl } from './shared-types.js';

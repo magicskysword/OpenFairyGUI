@@ -36,8 +36,8 @@
 		"restore"
 	],
 	"devDependencies": {
-		"@openfairygui/core": "workspace:*",
-		"@openfairygui/functions": "workspace:*"
+		"@magicskysword/openfairygui-core": "^0.2.0",
+		"@magicskysword/openfairygui-functions": "^0.2.0"
 	},
 	"optionalDependencies": {
 		"sharp": ">=0.33.0"

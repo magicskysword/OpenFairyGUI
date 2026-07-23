@@ -5,7 +5,7 @@ import {
 	type GObject,
 	type Package,
 	ProjectType,
-} from '@openfairygui/core';
+} from '@magicskysword/openfairygui-core';
 import {
 	FGUI_TYPESCRIPT_BINDER_TEMPLATE,
 	FGUI_TYPESCRIPT_COMPONENT_TEMPLATE,

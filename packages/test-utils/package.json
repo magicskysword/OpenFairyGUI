@@ -44,6 +44,6 @@
 		"utils"
 	],
 	"dependencies": {
-		"@openfairygui/core": "workspace:*"
+		"@magicskysword/openfairygui-core": "^0.2.0"
 	}
 }

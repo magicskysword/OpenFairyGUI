@@ -14,7 +14,7 @@ import {
 	type SpineResource,
 	type SoundResource,
 	type Transform,
-} from '@openfairygui/core';
+} from '@magicskysword/openfairygui-core';
 import { createTransform } from './utils.js';
 import { atlas, type AtlasOptions } from './atlas.js';
 import { publishCodeGeneration } from './codegen.js';

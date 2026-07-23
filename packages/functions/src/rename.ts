@@ -1,4 +1,4 @@
-import type { Document, Transform } from '@openfairygui/core';
+import type { Document, Transform } from '@magicskysword/openfairygui-core';
 import { createTransform } from './utils.js';
 
 export interface RenameOptions {

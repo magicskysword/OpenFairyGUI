@@ -1,4 +1,4 @@
-import type { Transform } from '@openfairygui/core';
+import type { Transform } from '@magicskysword/openfairygui-core';
 
 /**
  * Wraps a transform function, assigning it a name for the transform stack.

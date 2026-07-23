@@ -1,4 +1,4 @@
-import type { Document, Package } from '@openfairygui/core';
+import type { Document, Package } from '@magicskysword/openfairygui-core';
 
 /**
  * Summary report for a single resource category.
