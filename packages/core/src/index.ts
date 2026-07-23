@@ -251,6 +251,11 @@ export {
 	type ProjectReadOptions,
 	type ProjectSourceFile,
 	type ProjectWriteOptions,
+	serializeProjectFiles,
+	serializeAffectedProjectFiles,
+	type SerializedProjectFile,
+	type SerializedProjectFileKind,
+	type ProjectFileTarget,
 } from './io/index.js';
 
 // Types

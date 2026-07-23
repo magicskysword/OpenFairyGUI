@@ -4,3 +4,10 @@ export { ProjectWriter, type ProjectSourceFile, type ProjectWriteOptions } from 
 export { BinaryReader } from './binary-reader.js';
 export { BinaryWriter, type BinaryWriterOptions } from './binary-writer.js';
 export { ReaderContext } from './reader-context.js';
+export {
+	serializeProjectFiles,
+	serializeAffectedProjectFiles,
+	type SerializedProjectFile,
+	type SerializedProjectFileKind,
+	type ProjectFileTarget,
+} from './project-files.js';
