@@ -1,5 +1,14 @@
 export { Logger, Verbosity, type ILogger } from './logger.js';
-export { generateId, parseURL, buildURL } from './id-utils.js';
+export {
+	generateId,
+	generateUniqueId,
+	generatePackageId,
+	generateResourceId,
+	generateChildId,
+	type GenerateUniqueIdOptions,
+	parseURL,
+	buildURL,
+} from './id-utils.js';
 export {
 	parseXML,
 	parseXYString,

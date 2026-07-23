@@ -118,7 +118,10 @@ export {
 
 // Utilities
 export {
-	Logger, Verbosity, type ILogger, generateId, parseURL, buildURL,
+	Logger, Verbosity, type ILogger,
+	generateId, generateUniqueId, generatePackageId, generateResourceId, generateChildId,
+	type GenerateUniqueIdOptions,
+	parseURL, buildURL,
 	maxRectsPack, type PackInput, type PackResult, type PackerOptions,
 	parseJta, type JtaDef, type JtaFrame, type JtaTexture,
 } from './utils/index.js';
