@@ -137,6 +137,10 @@ export {
 	ReaderContext,
 	type BinaryWriterOptions,
 	type FileSystem,
+	preserveOpaqueProjectXml,
+	inspectOpaqueProjectXml,
+	type OpaqueProjectXmlKind,
+	type OpaqueXmlFinding,
 } from './io/index.js';
 
 // Types

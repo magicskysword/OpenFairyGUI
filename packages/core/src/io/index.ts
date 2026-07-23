@@ -5,3 +5,9 @@ export { ProjectWriter } from './project-writer.js';
 export { BinaryReader } from './binary-reader.js';
 export { BinaryWriter, type BinaryWriterOptions } from './binary-writer.js';
 export { ReaderContext } from './reader-context.js';
+export {
+	preserveOpaqueProjectXml,
+	inspectOpaqueProjectXml,
+	type OpaqueProjectXmlKind,
+	type OpaqueXmlFinding,
+} from './opaque-project-xml.js';

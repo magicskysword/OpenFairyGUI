@@ -9,6 +9,7 @@ import type { Gear } from '../properties/gear.js';
 import { ControllerActionType, GearType, TransitionActionType } from '../constants.js';
 import type { FileSystem } from './project-reader.js';
 import { PROJECT_XML_PROTOCOL, writeXmlAttr, type XmlNodeProtocol } from './project-xml-protocol.js';
+import { preserveOpaqueProjectXml } from './opaque-project-xml.js';
 
 const builder = new XMLBuilder({
 	ignoreAttributes: false,
@@ -789,8 +790,12 @@ export class ProjectWriter {
 		const basePath = fs.dirname(projectPath);
 
 		// 1. Write .fairy file
-		const fairyXml = `<?xml version="1.0" encoding="utf-8"?>\n`
+		const generatedFairyXml = `<?xml version="1.0" encoding="utf-8"?>\n`
 			+ `<projectDescription id="${root.getProjectId()}" type="${this._projectTypeName(root.getProjectType())}" version="${root.getVersion() || '3.0'}"/>\n`;
+		const sourceFairyXml = root.getExtras()._sourceProjectXml;
+		const fairyXml = typeof sourceFairyXml === 'string'
+			? preserveOpaqueProjectXml('project', sourceFairyXml, generatedFairyXml)
+			: generatedFairyXml;
 		await fs.writeFile(projectPath, fairyXml);
 
 		// 2. Write settings
@@ -891,10 +896,12 @@ export class ProjectWriter {
 		if (publishAtlases.length > 0) {
 			publishAttrs.atlas = publishAtlases;
 		}
-		await fs.writeFile(
-			fs.join(pkgDir, 'package.xml'),
-			this._renderPackageDescriptionXml(packageDescriptionAttrs, mainResources, publishAttrs),
-		);
+		const generatedPackageXml = this._renderPackageDescriptionXml(packageDescriptionAttrs, mainResources, publishAttrs);
+		const sourceXmlByBranch = pkg.getExtras()._sourcePackageXmlByBranch as Record<string, string> | undefined;
+		const packageXml = typeof sourceXmlByBranch?.[''] === 'string'
+			? preserveOpaqueProjectXml('package', sourceXmlByBranch[''], generatedPackageXml)
+			: generatedPackageXml;
+		await fs.writeFile(fs.join(pkgDir, 'package.xml'), packageXml);
 
 		// Write main-branch component XML files
 		for (const comp of mainResources.filter((resource): resource is Component => resource.propertyType === 'Component')) {
@@ -905,10 +912,11 @@ export class ProjectWriter {
 			if (!branchName) continue;
 			const branchPkgDir = fs.join(basePath, `assets_${branchName}`, pkg.getName());
 			await fs.mkdir(branchPkgDir);
-			await fs.writeFile(
-				fs.join(branchPkgDir, 'package_branch.xml'),
-				this._renderBranchDescriptionXml(branchResources),
-			);
+			const generatedBranchXml = this._renderBranchDescriptionXml(branchResources);
+			const branchXml = typeof sourceXmlByBranch?.[branchName] === 'string'
+				? preserveOpaqueProjectXml('branch', sourceXmlByBranch[branchName], generatedBranchXml)
+				: generatedBranchXml;
+			await fs.writeFile(fs.join(branchPkgDir, 'package_branch.xml'), branchXml);
 
 			for (const comp of branchResources.filter((resource): resource is Component => resource.propertyType === 'Component')) {
 				await this._writeComponent(comp, branchPkgDir);
@@ -1264,7 +1272,12 @@ export class ProjectWriter {
 			component: compNode,
 		};
 
-		await fs.writeFile(fs.join(fileDir, name), builder.build(xmlObj) as string);
+		const generatedComponentXml = builder.build(xmlObj) as string;
+		const sourceComponentXml = comp.getExtras()._sourceComponentXml;
+		const componentXml = typeof sourceComponentXml === 'string'
+			? preserveOpaqueProjectXml('component', sourceComponentXml, generatedComponentXml)
+			: generatedComponentXml;
+		await fs.writeFile(fs.join(fileDir, name), componentXml);
 	}
 
 	private _serializeController(ctrl: Controller): Record<string, unknown> {
