@@ -2347,6 +2347,8 @@ export class ProjectReader {
 				if (columnGap !== undefined) g.setColumnGap(parseInt2(columnGap));
 				const lineCount = readXmlAttr<string | number>(attrs, PROJECT_XML_PROTOCOL.list.attrs.lineCount);
 				if (lineCount !== undefined) g.setLineCount?.(parseInt2(lineCount));
+				const columnCount = readXmlAttr<string | number>(attrs, PROJECT_XML_PROTOCOL.list.attrs.columnCount);
+				if (columnCount !== undefined) g.setColumnCount?.(parseInt2(columnCount));
 				const autoResizeItem = readXmlAttr<string | boolean>(attrs, PROJECT_XML_PROTOCOL.list.attrs.autoResizeItem);
 				if (autoResizeItem !== undefined) g.setAutoResizeItem?.(parseBool(autoResizeItem));
 				const selectionMode = readXmlAttr<string>(attrs, PROJECT_XML_PROTOCOL.list.attrs.selectionMode);

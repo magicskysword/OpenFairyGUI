@@ -1173,6 +1173,8 @@ test('round-trip: list scroll attrs and static items survive write→read', asyn
 	list.setLayout(4);
 	list.setLineGap(6);
 	list.setColumnGap(8);
+	list.setLineCount(5);
+	list.setColumnCount(3);
 	list.setSelectionMode(1);
 	list.setDefaultItem('ui://pkg003/item');
 	list.setOverflow(2);
@@ -1215,6 +1217,8 @@ test('round-trip: list scroll attrs and static items survive write→read', asyn
 		await io.writeProject(doc, outFairy);
 		const listXml = await fs.readFile(path.join(tmpDir, 'assets', 'Demo3', 'Lists.xml'), 'utf-8');
 		t.true(listXml.includes('controllers="bg,0,type,0"'), 'list static item writes canonical controllers attr');
+		t.true(listXml.includes('lineItemCount="5"'), 'list writes horizontal item count');
+		t.true(listXml.includes('lineItemCount2="3"'), 'pagination list writes vertical item count');
 
 		const doc2 = await io.readProject(outFairy);
 		const comp2 = doc2.getRoot().getPackage('Demo3')?.listComponents().find((item) => item.getName() === 'Lists');
@@ -1225,6 +1229,8 @@ test('round-trip: list scroll attrs and static items survive write→read', asyn
 		t.is(list2.getLayout(), 4);
 		t.is(list2.getLineGap(), 6);
 		t.is(list2.getColumnGap(), 8);
+		t.is(list2.getLineCount(), 5);
+		t.is(list2.getColumnCount(), 3);
 		t.is(list2.getSelectionMode(), 1);
 		t.is(list2.getDefaultItem(), 'ui://pkg003/item');
 		t.is(list2.getOverflow(), 2);
