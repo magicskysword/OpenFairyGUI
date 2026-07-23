@@ -238,6 +238,16 @@ export {
 	type JtaTexture,
 } from './utils/index.js';
 
+// Resource references
+export {
+	buildResourceReferenceIndex,
+	ResourceReferenceIndex,
+	type ResourceReference,
+	type ResourceReferenceCascadeAction,
+	type ResourceReferenceSource,
+	type ResourceReferenceTarget,
+} from './references/resource-reference-index.js';
+
 // I/O
 export {
 	PlatformIO,
