@@ -141,6 +141,11 @@ export {
 	inspectOpaqueProjectXml,
 	type OpaqueProjectXmlKind,
 	type OpaqueXmlFinding,
+	serializeProjectFiles,
+	serializeAffectedProjectFiles,
+	type SerializedProjectFile,
+	type SerializedProjectFileKind,
+	type ProjectFileTarget,
 } from './io/index.js';
 
 // Types

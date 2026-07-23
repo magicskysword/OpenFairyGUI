@@ -11,3 +11,10 @@ export {
 	type OpaqueProjectXmlKind,
 	type OpaqueXmlFinding,
 } from './opaque-project-xml.js';
+export {
+	serializeProjectFiles,
+	serializeAffectedProjectFiles,
+	type SerializedProjectFile,
+	type SerializedProjectFileKind,
+	type ProjectFileTarget,
+} from './project-files.js';
