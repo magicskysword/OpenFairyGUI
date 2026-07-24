@@ -72,6 +72,7 @@ function parsePackageBinary(bytes: Uint8Array): {
 		ext: number | null;
 		branch: string | null;
 		branchItems: Array<string | null>;
+		highResolution: Array<string | null>;
 	}>;
 	spriteIds: string[];
 	hitTestIds: string[];
@@ -383,6 +384,12 @@ test('publishToMemory: links implicit high-resolution image variants', async (t)
 				.setExported(exported);
 			pkg.addResource(image);
 		}
+		const component = doc.createComponent('Main');
+		component.setId('cmp01').setExported(true).setSize(32, 32);
+		const imageChild = doc.createGImage('icon');
+		imageChild.setId('n0').setSrc('base1').setSize(32, 32);
+		component.addChild(imageChild);
+		pkg.addResource(component);
 
 		const artifacts = await publishToMemory(doc, {
 			encoder: sharp,
@@ -404,6 +411,8 @@ test('publishToMemory: links implicit high-resolution image variants', async (t)
 		t.deepEqual(byId.get('high4')?.highResolution, []);
 		t.true(byId.has('high2'), '未导出的 @2x 变体应由基准资源带入发布结果');
 		t.true(byId.has('high4'), '未导出的 @4x 变体应由基准资源带入发布结果');
+		t.true(parsed.spriteIds.includes('high2'), '被引用基准资源的 @2x 变体应进入图集');
+		t.true(parsed.spriteIds.includes('high4'), '被引用基准资源的 @4x 变体应进入图集');
 	} finally {
 		await fs.rm(tmpDir, { recursive: true, force: true });
 	}
