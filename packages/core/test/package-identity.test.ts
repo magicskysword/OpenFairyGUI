@@ -54,6 +54,7 @@ test('npm trusted publishing is tokenless, version-gated, and dependency ordered
 	t.regex(workflow, /package-manager-cache:\s*false/);
 	t.regex(workflow, /packages\/core\/package\.json/);
 	t.regex(workflow, /packages\/functions\/package\.json/);
+	t.regex(workflow, /-run\\\./);
 	t.regex(workflow, /pnpm test/);
 
 	const corePublish = workflow.indexOf('npm publish ./packages/core --access public');
