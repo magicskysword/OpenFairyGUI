@@ -38,4 +38,10 @@ export abstract class PlatformIO {
 		const writer = new BinaryWriter(fs);
 		return writer.write(doc, filePath, options);
 	}
+
+	public serializeBinary(doc: Document, options?: BinaryWriterOptions): Uint8Array {
+		const fs = this.createFileSystem();
+		const writer = new BinaryWriter(fs);
+		return writer.serialize(doc, options);
+	}
 }

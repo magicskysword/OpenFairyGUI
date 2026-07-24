@@ -692,6 +692,25 @@ test('binary round-trip: written file has valid magic and package info', async (
 	}
 });
 
+test('binary writer: serializeBinary returns the same bytes without requiring an output path', async (t) => {
+	const io = new NodeIO();
+	const doc = await io.readBinary(BASICS_FUI);
+
+	const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'openfairygui-bw-memory-'));
+	const outPath = path.join(tmpDir, 'out_fui.bytes');
+
+	try {
+		const memoryBytes = io.serializeBinary(doc, { compressed: false });
+		await io.writeBinary(doc, outPath, { compressed: false });
+		const fileBytes = await fs.readFile(outPath);
+
+		t.true(memoryBytes instanceof Uint8Array);
+		t.deepEqual(memoryBytes, new Uint8Array(fileBytes.buffer, fileBytes.byteOffset, fileBytes.byteLength));
+	} finally {
+		await fs.rm(tmpDir, { recursive: true, force: true });
+	}
+});
+
 test('binary round-trip: resource count is preserved', async (t) => {
 	const io = new NodeIO();
 	const doc = await io.readBinary(BASICS_FUI);
