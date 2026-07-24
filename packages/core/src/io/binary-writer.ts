@@ -7,6 +7,7 @@ import type { ImageResource } from '../properties/image-resource.js';
 import { FGUI_MAGIC } from '../constants.js';
 import { WriteBuffer } from './write-buffer.js';
 import { encodeComponent } from './component-encoder.js';
+import { inferHighResolutionItemIds } from './high-resolution-resources.js';
 import type { FileSystem } from './project-reader.js';
 
 /**
@@ -271,6 +272,7 @@ export class BinaryWriter {
 		const branchNames = includeBranches ? getPackageBranchNames(doc, resources) : [];
 		const branchItemIdsMap = buildBranchItemIdsMap(pkg, branchNames);
 		const publishedItemIdMap = new Map(resources.map((resource) => [resource.getId(), getPublishedItemId(resource)]));
+		const highResolutionItemIdsMap = inferHighResolutionItemIds(resources);
 
 		// Collect sprites from Atlas/Sprite property nodes OR extras.sprites (BinaryReader round-trip)
 		const sprites: BinarySpriteEntry[] = [];
@@ -559,7 +561,13 @@ export class BinaryWriter {
 				for (const branchItemId of branchItemIds) {
 					data.writeSEx(branchItemId || null);
 				}
-				data.writeUint8(0); // highResCount
+				const highResolutionItemIds = 'getExtras' in res
+					? highResolutionItemIdsMap.get(res.getId()) ?? []
+					: [];
+				data.writeUint8(highResolutionItemIds.length);
+				for (const itemId of highResolutionItemIds) {
+					data.writeSEx(itemId ? publishedItemIdMap.get(itemId) ?? itemId : null);
+				}
 			}
 
 			// Patch nextPos offset

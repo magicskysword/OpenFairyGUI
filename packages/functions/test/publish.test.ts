@@ -129,6 +129,7 @@ function parsePackageBinary(bytes: Uint8Array): {
 		ext: number | null;
 		branch: string | null;
 		branchItems: Array<string | null>;
+		highResolution: Array<string | null>;
 	}> = [];
 	pos = offsets[1];
 	const itemCount = dataView.getInt16(pos, false);
@@ -197,11 +198,24 @@ function parsePackageBinary(bytes: Uint8Array): {
 			branchItems.push(branchItemRef.value);
 		}
 		const highResCount = dataView.getUint8(pos++);
+		const highResolution: Array<string | null> = [];
 		for (let highResIndex = 0; highResIndex < highResCount; highResIndex++) {
-			pos += 2;
+			const highResolutionRef = readStringRef(dataView, strings, pos);
+			pos = highResolutionRef.nextPos;
+			highResolution.push(highResolutionRef.value);
 		}
 
-		items.push({ type, id, file, width, height, ext, branch: branchRef.value, branchItems });
+		items.push({
+			type,
+			id,
+			file,
+			width,
+			height,
+			ext,
+			branch: branchRef.value,
+			branchItems,
+			highResolution,
+		});
 		pos = nextPos;
 	}
 
@@ -324,6 +338,72 @@ test('publishToMemory: returns runtime package and atlas bytes without an output
 		const atlasBytes = artifacts.find((artifact) => artifact.fileName === 'MemoryPkg_atlas0.png')?.data;
 		t.truthy(atlasBytes);
 		t.deepEqual([...(atlasBytes ?? new Uint8Array()).subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
+	} finally {
+		await fs.rm(tmpDir, { recursive: true, force: true });
+	}
+});
+
+test('publishToMemory: links implicit high-resolution image variants', async (t) => {
+	const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'openfairygui-pub-scale-'));
+	const imageDir = path.join(tmpDir, 'ScalePkg');
+
+	try {
+		await fs.mkdir(imageDir, { recursive: true });
+		for (const [fileName, size, color] of [
+			['icon.png', 8, { r: 220, g: 20, b: 60, alpha: 1 }],
+			['icon@2x.png', 16, { r: 30, g: 100, b: 230, alpha: 1 }],
+			['icon@4x.png', 32, { r: 20, g: 160, b: 70, alpha: 1 }],
+		] as const) {
+			await sharp({
+				create: {
+					width: size,
+					height: size,
+					channels: 4,
+					background: color,
+				},
+			}).png().toFile(path.join(imageDir, fileName));
+		}
+
+		const doc = new Document();
+		doc.getRoot().setProjectType(7);
+		const pkg = doc.createPackage('ScalePkg');
+		pkg.setId('scale001').setPublishName('ScalePkg');
+		for (const [name, id, fileName, size, exported] of [
+			['icon', 'base1', 'icon.png', 8, true],
+			['icon@2x', 'high2', 'icon@2x.png', 16, false],
+			['icon@4x', 'high4', 'icon@4x.png', 32, false],
+		] as const) {
+			const image = doc.createImageResource(name);
+			image
+				.setId(id)
+				.setPath('/')
+				.setFileName(fileName)
+				.setWidth(size)
+				.setHeight(size)
+				.setExported(exported);
+			pkg.addResource(image);
+		}
+
+		const artifacts = await publishToMemory(doc, {
+			encoder: sharp,
+			basePath: tmpDir,
+			fileExtension: 'fui',
+		});
+		const packageArtifact = artifacts.find(
+			(artifact) => artifact.fileName === 'ScalePkg.fui',
+		);
+		t.truthy(packageArtifact);
+		const parsed = parsePackageBinary(packageArtifact!.data);
+		const byId = new Map(parsed.items.map((item) => [item.id, item]));
+		t.deepEqual(byId.get('base1')?.highResolution, [
+			'high2',
+			'high2',
+			'high4',
+		]);
+		t.deepEqual(byId.get('high2')?.highResolution, []);
+		t.deepEqual(byId.get('high4')?.highResolution, []);
+		t.true(byId.has('high2'), '未导出的 @2x 变体应由基准资源带入发布结果');
+		t.true(byId.has('high4'), '未导出的 @4x 变体应由基准资源带入发布结果');
 	} finally {
 		await fs.rm(tmpDir, { recursive: true, force: true });
 	}

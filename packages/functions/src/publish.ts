@@ -7,6 +7,7 @@ import {
 	type FileSystem,
 	type FontResource,
 	type ImageResource,
+	inferHighResolutionItemIds,
 	type MiscResource,
 	type MovieClipResource,
 	type Package,
@@ -614,9 +615,23 @@ function collectPackagePublishContext(
 		}
 	}
 
+	const highResolutionItemIds = inferHighResolutionItemIds(resources);
 	let changed = true;
 	while (changed) {
 		changed = false;
+		for (const [baseItemId, variantItemIds] of highResolutionItemIds) {
+			if (!publishedResourceIds.has(baseItemId)) continue;
+			for (const variantItemId of variantItemIds) {
+				if (
+					!variantItemId
+					|| publishedResourceIds.has(variantItemId)
+				) {
+					continue;
+				}
+				publishedResourceIds.add(variantItemId);
+				changed = true;
+			}
+		}
 		for (const resource of resources) {
 			if (!isSkeletonResource(resource)) continue;
 			if (!publishedResourceIds.has(resource.getId())) continue;

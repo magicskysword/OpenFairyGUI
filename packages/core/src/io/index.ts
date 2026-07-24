@@ -4,6 +4,10 @@ export { ProjectReader, type FileSystem } from './project-reader.js';
 export { ProjectWriter } from './project-writer.js';
 export { BinaryReader } from './binary-reader.js';
 export { BinaryWriter, type BinaryWriterOptions } from './binary-writer.js';
+export {
+	inferHighResolutionItemIds,
+	type HighResolutionResourceLike,
+} from './high-resolution-resources.js';
 export { ReaderContext } from './reader-context.js';
 export {
 	preserveOpaqueProjectXml,
