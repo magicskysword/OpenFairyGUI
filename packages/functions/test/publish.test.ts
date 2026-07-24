@@ -5,7 +5,7 @@ import os from 'node:os';
 import { NodeIO, Document } from '@magicskysword/openfairygui-core';
 import { getFixturePath, getFixtureProjectPath } from '@openfairygui/test-utils';
 import sharp from 'sharp';
-import { publish, resolvePublishOptions, type RootProjectSettings } from '../src/index.js';
+import { publish, publishToMemory, resolvePublishOptions, type RootProjectSettings } from '../src/index.js';
 import { resolvePublishAtlasRuntimeOptions } from '../src/publish.js';
 
 const UNITY_EXAMPLES_FAIRY = getFixtureProjectPath('FairyGUI-unity', 'UIProject/FairyGUI-Unity-Examples.fairy');
@@ -275,6 +275,55 @@ test('publish: generates .fui files for a synthetic document', async (t) => {
 		t.is(pkg2.getId(), 'test0001', 'package ID preserved');
 		t.is(pkg2.getName(), 'TestPkg', 'package name preserved');
 		t.is(pkg2.listResources().length, 0, 'publish prunes unexported and unreferenced resources from binary output');
+	} finally {
+		await fs.rm(tmpDir, { recursive: true, force: true });
+	}
+});
+
+test('publishToMemory: returns runtime package and atlas bytes without an output directory', async (t) => {
+	const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'openfairygui-pub-memory-'));
+	const imageDir = path.join(tmpDir, 'MemoryPkg');
+	const imagePath = path.join(imageDir, 'icon.png');
+
+	try {
+		await fs.mkdir(imageDir, { recursive: true });
+		await sharp({
+			create: {
+				width: 20,
+				height: 12,
+				channels: 4,
+				background: { r: 24, g: 80, b: 160, alpha: 1 },
+			},
+		}).png().toFile(imagePath);
+
+		const doc = new Document();
+		doc.getRoot().setProjectType(7);
+		const pkg = doc.createPackage('MemoryPkg');
+		pkg.setId('memory01').setPublishName('MemoryPkg').setGenCode(true);
+		const image = doc.createImageResource('icon');
+		image
+			.setId('icon1')
+			.setPath('/')
+			.setWidth(20)
+			.setHeight(12)
+			.setExported(true)
+			.setExtras({ ...image.getExtras(), _fileName: 'icon.png' });
+		pkg.addResource(image);
+
+		const artifacts = await publishToMemory(doc, {
+			encoder: sharp,
+			basePath: tmpDir,
+			fileExtension: 'fui',
+		});
+
+		t.deepEqual(artifacts.map((artifact) => artifact.fileName), [
+			'MemoryPkg.fui',
+			'MemoryPkg_atlas0.png',
+		]);
+		t.true((artifacts.find((artifact) => artifact.fileName === 'MemoryPkg.fui')?.data.length ?? 0) > 0);
+		const atlasBytes = artifacts.find((artifact) => artifact.fileName === 'MemoryPkg_atlas0.png')?.data;
+		t.truthy(atlasBytes);
+		t.deepEqual([...(atlasBytes ?? new Uint8Array()).subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
 	} finally {
 		await fs.rm(tmpDir, { recursive: true, force: true });
 	}

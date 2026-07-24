@@ -22,6 +22,11 @@ export {
 	type ResolvedPublishOptions,
 	type ResolvePublishOptionsOverrides,
 } from './publish.js';
+export {
+	publishToMemory,
+	type MemoryPublishArtifact,
+	type PublishToMemoryOptions,
+} from './publish-memory.js';
 export { createTransform } from './utils.js';
 export type {
 	CliAtlasSettings,

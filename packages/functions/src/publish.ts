@@ -78,6 +78,12 @@ export interface PublishOptions {
 	 * Empty or omitted means publishing the main branch.
 	 */
 	branch?: string;
+
+	/**
+	 * Whether to generate source-code bindings after runtime artifacts.
+	 * Default: true. Runtime preview compilation disables this.
+	 */
+	generateCode?: boolean;
 }
 
 export interface ResolvedPublishAtlasOptions extends Pick<AtlasOptions, 'maxSize' | 'fast' | 'allowRotation' | 'padding' | 'powerOfTwo' | 'square' | 'multiPage' | 'trimImage' | 'extractAlpha'> {}
@@ -1041,11 +1047,13 @@ export function publish(options: PublishOptions): Transform {
 			logger.info(`publish: Written ${fileName}`);
 		}
 
-		await publishCodeGeneration(doc, {
-			basePath: options.basePath,
-			fs: options.fs,
-			packages: allPackages,
-		});
+		if (options.generateCode !== false) {
+			await publishCodeGeneration(doc, {
+				basePath: options.basePath,
+				fs: options.fs,
+				packages: allPackages,
+			});
+		}
 
 		logger.info(`publish: Published ${allPackages.length} package(s) to ${options.output}`);
 	});
