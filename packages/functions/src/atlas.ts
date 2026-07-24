@@ -5,6 +5,9 @@ import type { ExtrasMap, HasOptionalSrc, HasOptionalUrl } from './shared-types.j
 import { createTransform } from './utils.js';
 
 export interface AtlasOptions {
+	/** Filter which packages to pack by name. If omitted, all packages are packed. */
+	packages?: string[];
+
 	/**
 	 * Sharp module instance, injected by the caller.
 	 * Required for actual image compositing and trimImage.
@@ -101,7 +104,7 @@ export interface AtlasOptions {
 
 }
 
-const ATLAS_DEFAULTS: Required<Omit<AtlasOptions, 'encoder' | 'basePath' | 'outputPath' | 'mkdir' | 'writeFileRaw' | 'readFileRaw'>> = {
+const ATLAS_DEFAULTS: Required<Omit<AtlasOptions, 'packages' | 'encoder' | 'basePath' | 'outputPath' | 'mkdir' | 'writeFileRaw' | 'readFileRaw'>> = {
 	maxSize: 2048,
 	fast: true,
 	allowRotation: true,
@@ -444,8 +447,12 @@ export function atlas(_options: AtlasOptions = {}): Transform {
 		const logger = doc.getLogger();
 		const encoder = options.encoder as AtlasEncoder | undefined;
 		const doTrim = options.trimImage && !!encoder && !!options.basePath;
+		const selectedPackages = options.packages
+			? new Set(options.packages)
+			: undefined;
 
 		for (const pkg of root.listPackages()) {
+			if (selectedPackages && !selectedPackages.has(pkg.getName())) continue;
 			// Respect publish-selected resources when publish() precomputes a merged branch view.
 			const selectedPublishIds = new Set(((pkg.getExtras() as PackageAtlasExtras | undefined) ?? {}).publishedResourceIds ?? []);
 			const allResources = selectedPublishIds.size > 0

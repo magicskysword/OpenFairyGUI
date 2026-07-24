@@ -726,6 +726,58 @@ test('publish: package filter works', async (t) => {
 	}
 });
 
+test('publish: package filter excludes atlas output from unselected packages', async (t) => {
+	const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'openfairygui-pub-filter-atlas-'));
+	const assetsDir = path.join(tmpDir, 'assets');
+	const outputDir = path.join(tmpDir, 'release');
+
+	try {
+		const doc = new Document();
+		doc.getRoot().setProjectType(7);
+		for (const [name, id, color] of [
+			['Include', 'inc00001', { r: 40, g: 120, b: 200 }],
+			['Exclude', 'exc00001', { r: 200, g: 80, b: 40 }],
+		] as const) {
+			const packageDir = path.join(assetsDir, name);
+			await fs.mkdir(packageDir, { recursive: true });
+			await sharp({
+				create: {
+					width: 12,
+					height: 12,
+					channels: 4,
+					background: { ...color, alpha: 1 },
+				},
+			}).png().toFile(path.join(packageDir, 'icon.png'));
+
+			const pkg = doc.createPackage(name);
+			pkg.setId(id);
+			const image = doc.createImageResource('icon');
+			image
+				.setId(`${id.slice(0, 4)}1`)
+				.setPath('/')
+				.setWidth(12)
+				.setHeight(12)
+				.setExported(true)
+				.setExtras({ ...image.getExtras(), _fileName: 'icon.png' });
+			pkg.addResource(image);
+		}
+
+		await doc.transform(publish({
+			output: outputDir,
+			packages: ['Include'],
+			encoder: sharp,
+			basePath: assetsDir,
+			fs: createFs(),
+		}));
+
+		const outputNames = await fs.readdir(outputDir);
+		t.true(outputNames.includes('Include_atlas0.png'));
+		t.false(outputNames.includes('Exclude_atlas0.png'));
+	} finally {
+		await fs.rm(tmpDir, { recursive: true, force: true });
+	}
+});
+
 test('publish: without fs, only computes layout', async (t) => {
 	const doc = new Document();
 	const pkg = doc.createPackage('LayoutOnly');

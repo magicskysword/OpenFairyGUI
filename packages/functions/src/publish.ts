@@ -1025,6 +1025,7 @@ export function publish(options: PublishOptions): Transform {
 				mkdir: options.fs ? options.fs.mkdir : undefined,
 				writeFileRaw: options.fs?.writeFileRaw,
 				readFileRaw: options.atlas?.readFileRaw ?? options.fs?.readFileRaw,
+				packages: allPackages.map((pkg) => pkg.getName()),
 				...atlasRuntimeOptions,
 			};
 			await atlas(atlasOpts)(doc);
