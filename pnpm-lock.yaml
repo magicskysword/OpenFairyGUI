@@ -75,7 +75,7 @@ importers:
   packages/functions:
     dependencies:
       '@magicskysword/openfairygui-core':
-        specifier: ^0.2.0
+        specifier: ^0.2.1
         version: link:../core
     devDependencies:
       ava:
