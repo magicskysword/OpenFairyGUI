@@ -5,11 +5,11 @@
 	"license": "MIT",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/OpenFairyGUI/OpenFairyGUI.git"
+		"url": "git+https://github.com/magicskysword/OpenFairyGUI.git"
 	},
-	"homepage": "https://github.com/OpenFairyGUI/OpenFairyGUI#readme",
+	"homepage": "https://github.com/magicskysword/OpenFairyGUI#readme",
 	"bugs": {
-		"url": "https://github.com/OpenFairyGUI/OpenFairyGUI/issues"
+		"url": "https://github.com/magicskysword/OpenFairyGUI/issues"
 	},
 	"type": "module",
 	"scripts": {

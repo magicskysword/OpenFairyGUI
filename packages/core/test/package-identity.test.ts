@@ -6,9 +6,18 @@ async function readJson(url: URL): Promise<Record<string, any>> {
 }
 
 test('fork packages expose stable magicskysword names and semver dependencies', async (t) => {
+	const workspaceRoot = await readJson(new URL('../../../package.json', import.meta.url));
 	const core = await readJson(new URL('../package.json', import.meta.url));
 	const functions = await readJson(new URL('../../functions/package.json', import.meta.url));
 
+	t.deepEqual(workspaceRoot.repository, {
+		type: 'git',
+		url: 'git+https://github.com/magicskysword/OpenFairyGUI.git',
+	});
+	t.is(workspaceRoot.homepage, 'https://github.com/magicskysword/OpenFairyGUI#readme');
+	t.deepEqual(workspaceRoot.bugs, {
+		url: 'https://github.com/magicskysword/OpenFairyGUI/issues',
+	});
 	t.is(core.name, '@magicskysword/openfairygui-core');
 	t.is(core.version, '0.2.0');
 	t.is(functions.name, '@magicskysword/openfairygui-functions');
