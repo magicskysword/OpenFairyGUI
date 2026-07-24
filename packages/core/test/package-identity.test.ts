@@ -37,3 +37,39 @@ test('workspace links matching semver package versions for local development', a
 	t.truthy(tsconfig.compilerOptions.paths['@magicskysword/openfairygui-core']);
 	t.truthy(tsconfig.compilerOptions.paths['@magicskysword/openfairygui-functions']);
 });
+
+test('npm trusted publishing is tokenless, version-gated, and dependency ordered', async (t) => {
+	const workflow = await fs.readFile(
+		new URL('../../../.github/workflows/publish.yml', import.meta.url),
+		'utf8',
+	);
+
+	t.regex(workflow, /tags:\s*\r?\n\s*-\s*['"]npm-v\*['"]/);
+	t.regex(workflow, /id-token:\s*write/);
+	t.regex(workflow, /contents:\s*read/);
+	t.regex(workflow, /actions\/checkout@v6/);
+	t.regex(workflow, /actions\/setup-node@v6/);
+	t.regex(workflow, /node-version:\s*['"]24['"]/);
+	t.regex(workflow, /package-manager-cache:\s*false/);
+	t.regex(workflow, /packages\/core\/package\.json/);
+	t.regex(workflow, /packages\/functions\/package\.json/);
+	t.regex(workflow, /pnpm test/);
+
+	const corePublish = workflow.indexOf('npm publish ./packages/core --access public');
+	const functionsPublish = workflow.indexOf(
+		'npm publish ./packages/functions --access public',
+	);
+	t.true(corePublish >= 0);
+	t.true(functionsPublish > corePublish);
+	t.notRegex(workflow, /NODE_AUTH_TOKEN|NPM_TOKEN|--provenance/);
+});
+
+test('legacy fork release workflow is removed', async (t) => {
+	const legacyWorkflow = new URL(
+		'../../../.github/workflows/release.yml',
+		import.meta.url,
+	);
+	const error = await t.throwsAsync(fs.stat(legacyWorkflow));
+
+	t.is((error as NodeJS.ErrnoException).code, 'ENOENT');
+});
