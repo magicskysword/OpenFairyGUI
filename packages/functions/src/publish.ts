@@ -992,6 +992,7 @@ export function publish(options: PublishOptions): Transform {
 			basePath: options.basePath,
 			outputPath: options.fs ? options.output : undefined,
 			mkdir: options.fs ? options.fs.mkdir : undefined,
+			writeFileRaw: options.fs?.writeFileRaw,
 			readFileRaw: options.atlas?.readFileRaw ?? options.fs?.readFileRaw,
 			...atlasRuntimeOptions,
 		};

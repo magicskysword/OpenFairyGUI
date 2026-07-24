@@ -266,3 +266,58 @@ test('atlas: direct single PNG output keeps portrait sprite unrotated for Unity 
 		await fs.rm(tmpDir, { recursive: true, force: true });
 	}
 });
+
+test('atlas: emits generated PNG bytes through an in-memory output sink', async (t) => {
+	const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'openfairygui-atlas-memory-'));
+	const imageDir = path.join(tmpDir, 'MemoryPkg');
+	const imagePath = path.join(imageDir, 'icon.png');
+	const outputDir = path.join(tmpDir, 'must-not-be-created');
+
+	try {
+		await fs.mkdir(imageDir, { recursive: true });
+		await sharp({
+			create: {
+				width: 24,
+				height: 16,
+				channels: 4,
+				background: { r: 32, g: 96, b: 192, alpha: 1 },
+			},
+		}).png().toFile(imagePath);
+
+		const doc = new Document();
+		const pkg = doc.createPackage('MemoryPkg');
+		pkg.setId('memory01');
+		const image = doc.createImageResource('icon');
+		image
+			.setId('icon1')
+			.setPath('/')
+			.setWidth(24)
+			.setHeight(16)
+			.setExported(true)
+			.setExtras({ ...image.getExtras(), _fileName: 'icon.png' });
+		pkg.addResource(image);
+
+		const emitted = new Map<string, Uint8Array>();
+		await doc.transform(atlas({
+			encoder: sharp,
+			basePath: tmpDir,
+			outputPath: outputDir,
+			mkdir: async () => undefined,
+			writeFileRaw: async (filePath, data) => {
+				emitted.set(filePath, data);
+			},
+			maxSize: 64,
+		}));
+
+		t.is(emitted.size, 1);
+		const [emittedPath, emittedPng] = [...emitted.entries()][0]!;
+		t.true(emittedPath.endsWith('MemoryPkg_atlas0.png'));
+		t.deepEqual([...emittedPng.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
+		const metadata = await sharp(emittedPng).metadata();
+		t.true((metadata.width ?? 0) >= 24);
+		t.true((metadata.height ?? 0) >= 16);
+		await t.throwsAsync(fs.access(outputDir));
+	} finally {
+		await fs.rm(tmpDir, { recursive: true, force: true });
+	}
+});

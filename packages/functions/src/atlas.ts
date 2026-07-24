@@ -63,6 +63,12 @@ export interface AtlasOptions {
 	mkdir?: (path: string) => Promise<void>;
 
 	/**
+	 * Optional output sink for generated atlas PNG bytes.
+	 * When omitted, the encoder writes directly to outputPath.
+	 */
+	writeFileRaw?: (path: string, data: Uint8Array) => Promise<void>;
+
+	/**
 	 * Optional raw file reader for reading .jta MovieClip files.
 	 * Required for MovieClip frame atlas packing.
 	 */
@@ -95,7 +101,7 @@ export interface AtlasOptions {
 
 }
 
-const ATLAS_DEFAULTS: Required<Omit<AtlasOptions, 'encoder' | 'basePath' | 'outputPath' | 'mkdir' | 'readFileRaw'>> = {
+const ATLAS_DEFAULTS: Required<Omit<AtlasOptions, 'encoder' | 'basePath' | 'outputPath' | 'mkdir' | 'writeFileRaw' | 'readFileRaw'>> = {
 	maxSize: 2048,
 	fast: true,
 	allowRotation: true,
@@ -247,6 +253,18 @@ type AtlasEncoderInput =
 	};
 
 type AtlasEncoder = (input: AtlasEncoderInput) => AtlasEncoderPipeline;
+
+async function emitPng(
+	pipeline: AtlasEncoderPipeline,
+	outputFile: string,
+	writeFileRaw?: AtlasOptions['writeFileRaw'],
+): Promise<void> {
+	if (writeFileRaw) {
+		await writeFileRaw(outputFile, await pipeline.toBuffer());
+		return;
+	}
+	await pipeline.toFile(outputFile);
+}
 
 function resolveFontFileName(fontName: string): string {
 	return /\.fnt$/i.test(fontName) ? fontName : `${fontName}.fnt`;
@@ -679,7 +697,7 @@ export function atlas(_options: AtlasOptions = {}): Transform {
 						const atlasFileName = resolveAtlasOutputFileName(pkg, p, group.branchName);
 						const outputFile = `${options.outputPath}/${atlasFileName}`;
 
-						await encoder({
+						const pipeline = encoder({
 							create: {
 								width: page.width,
 								height: page.height,
@@ -688,8 +706,8 @@ export function atlas(_options: AtlasOptions = {}): Transform {
 							},
 						})
 							.composite(compositeInputs)
-							.png()
-							.toFile(outputFile);
+							.png();
+						await emitPng(pipeline, outputFile, options.writeFileRaw);
 
 						logger.info(`atlas: Generated ${atlasFileName} (${page.width}x${page.height}, ${page.outputRects.length} sprites)`);
 					}
@@ -842,10 +860,10 @@ async function emitDirectImageOutput(
 
 	try {
 		if (atlasSize.width === input.originalWidth && atlasSize.height === input.originalHeight) {
-			await encoder(filePath).png().toFile(outputFile);
+			await emitPng(encoder(filePath).png(), outputFile, options.writeFileRaw);
 		} else {
 			const imageBuffer = await encoder(filePath).png().toBuffer();
-			await encoder({
+			const pipeline = encoder({
 				create: {
 					width: atlasSize.width,
 					height: atlasSize.height,
@@ -854,8 +872,8 @@ async function emitDirectImageOutput(
 				},
 			})
 				.composite([{ input: imageBuffer, left: 0, top: 0 }])
-				.png()
-				.toFile(outputFile);
+				.png();
+			await emitPng(pipeline, outputFile, options.writeFileRaw);
 		}
 	} catch {
 		logger.warn(`atlas: Could not write direct-output atlas "${atlasFileName}".`);
