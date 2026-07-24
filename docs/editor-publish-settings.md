@@ -98,6 +98,25 @@
 - 工程 `package.xml` 中的 `publish` 节点当前正式支持 `name`、`path`、`branchPath`、`packageCount`、`genCode`、`codePath`，以及包级图集子节点 `<atlas name="Default" index="0"/>`。
 - 工程 `package.xml` 的 `packageDescription` 根节点当前正式支持 `compressPNG` 与 `jpegQuality`，用于承载包级图片压缩选项；未设置时保持省略，不强制写默认值。
 
+## `publish()` 当前执行模式
+
+`@magicskysword/openfairygui-functions` 的 `publish()` 提供两个执行模式：
+
+| `mode` | 行为 |
+|---|---|
+| `full` 或省略 | 执行图集打包，再输出包描述、声音、外部资源和配置要求的代码 |
+| `definitions` | 跳过图集打包，其余发布流程不变 |
+
+`definitions` 不要求输出目录中已有图集，也不判断最终产物能否独立运行；它只表达
+“本次不重新打图集”。发布到已有目录时，同名文件由调用方文件系统实现覆盖，
+`publish()` 不清空目录或主动删除其他运行时旧文件。
+
+`packages` 按包名筛选发布范围。筛选同时作用于包描述、图集、声音、外部资源和
+代码生成；未选包不会因为 atlas transform 遍历工程而产生图集文件。
+
+`publish()` 的 `output` 仍由宿主传入。宿主可以直接指定路径，也可以读取本页所述
+工程/包级设置后解析路径；调用参数中的输出路径不修改工程设置。
+
 ## 代码生成的当前实现范围
 
 OpenFairyGUI 当前已经把“代码生成”接入现有 `publish` 流程，但实现范围仍是**正式收口的一条首发口径**，不是编辑器全部模板矩阵。
