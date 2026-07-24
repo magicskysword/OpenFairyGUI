@@ -145,3 +145,28 @@ test('resource reference index preserves reference provenance and ignores malfor
 	t.false(index.list().some((reference) => reference.value === 'ui://short'));
 });
 
+test('resource reference index splits pipe-delimited gear URL states', (t) => {
+	const { document, targetPackageId, targetImageId, targetComponentId } = createFixture();
+	const sourceComponent = document.getRoot()
+		.getPackageById('source01')!
+		.getResourceById('host1') as {
+			listChildren(): Array<{
+				getId(): string;
+				listGears(): Array<{ setValues(value: string): void }>;
+			}>;
+		};
+	const text = sourceComponent.listChildren().find((child) => child.getId() === 'n4')!;
+	text.listGears()[0]!.setValues(
+		`ui://${targetPackageId}${targetImageId}`
+		+ `|ui://${targetPackageId}${targetComponentId}`,
+	);
+
+	const references = buildResourceReferenceIndex(document)
+		.list()
+		.filter((reference) => reference.source.field === 'gear.values');
+	t.deepEqual(
+		references.map((reference) => reference.target.resourceId).sort(),
+		[targetComponentId, targetImageId].sort(),
+	);
+	t.false(references.some((reference) => reference.target.resourceId.includes('|')));
+});

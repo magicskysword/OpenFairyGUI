@@ -55,16 +55,16 @@ function compareReferences(a: ResourceReference, b: ResourceReference): number {
 }
 
 function extractReferences(value: string): ResourceReferenceTarget[] {
-	const exact = parseURL(value);
-	if (exact?.resourceId) return [exact];
-
 	const targets: ResourceReferenceTarget[] = [];
 	for (const match of value.matchAll(URL_PATTERN)) {
 		const packageId = match[1];
 		const resourceId = match[2];
 		if (packageId && resourceId) targets.push({ packageId, resourceId });
 	}
-	return targets;
+	if (targets.length > 0) return targets;
+
+	const exact = parseURL(value);
+	return exact?.resourceId ? [exact] : [];
 }
 
 function ownerId(owner: GetterOwner): string | undefined {
@@ -339,4 +339,3 @@ export function buildResourceReferenceIndex(document: Document): ResourceReferen
 	}
 	return collector.finish();
 }
-
