@@ -295,6 +295,56 @@ test('publish: generates .fui files for a synthetic document', async (t) => {
 	}
 });
 
+test('publish: definitions mode writes package data without packing atlases', async (t) => {
+	const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'openfairygui-pub-definitions-'));
+	const assetsDir = path.join(tmpDir, 'assets');
+	const packageDir = path.join(assetsDir, 'DefinitionsPkg');
+	const outputDir = path.join(tmpDir, 'release');
+
+	try {
+		await fs.mkdir(packageDir, { recursive: true });
+		await sharp({
+			create: {
+				width: 16,
+				height: 12,
+				channels: 4,
+				background: { r: 32, g: 96, b: 160, alpha: 1 },
+			},
+		}).png().toFile(path.join(packageDir, 'icon.png'));
+
+		const doc = new Document();
+		doc.getRoot().setProjectType(7);
+		const pkg = doc.createPackage('DefinitionsPkg');
+		pkg.setId('defs0001').setPublishName('DefinitionsPkg');
+		const image = doc.createImageResource('icon');
+		image
+			.setId('icon1')
+			.setPath('/')
+			.setWidth(16)
+			.setHeight(12)
+			.setExported(true)
+			.setExtras({ ...image.getExtras(), _fileName: 'icon.png' });
+		pkg.addResource(image);
+
+		await doc.transform(publish({
+			output: outputDir,
+			mode: 'definitions',
+			encoder: sharp,
+			basePath: assetsDir,
+			fs: createFs(),
+		}));
+
+		const outputNames = await fs.readdir(outputDir);
+		t.true(outputNames.includes('DefinitionsPkg.fui'), 'package definition is emitted');
+		t.false(
+			outputNames.some((name) => /_atlas\d+\.png$/i.test(name)),
+			'definitions mode does not emit atlas PNG files',
+		);
+	} finally {
+		await fs.rm(tmpDir, { recursive: true, force: true });
+	}
+});
+
 test('publishToMemory: returns runtime package and atlas bytes without an output directory', async (t) => {
 	const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'openfairygui-pub-memory-'));
 	const imageDir = path.join(tmpDir, 'MemoryPkg');

@@ -18,6 +18,7 @@ export {
 	publish,
 	resolvePublishOptions,
 	type PublishOptions,
+	type PublishMode,
 	type ResolvedPublishAtlasOptions,
 	type ResolvedPublishOptions,
 	type ResolvePublishOptionsOverrides,

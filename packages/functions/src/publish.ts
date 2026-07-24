@@ -27,6 +27,8 @@ import type {
 	RootProjectSettings,
 } from './shared-types.js';
 
+export type PublishMode = 'full' | 'definitions';
+
 export interface PublishOptions {
 	/**
 	 * Output directory for published files (.fui + atlas PNGs).
@@ -85,6 +87,13 @@ export interface PublishOptions {
 	 * Default: true. Runtime preview compilation disables this.
 	 */
 	generateCode?: boolean;
+
+	/**
+	 * Full publish packs atlases before writing runtime artifacts.
+	 * Definitions publish skips atlas packing and leaves existing atlas files untouched.
+	 * Default: 'full'.
+	 */
+	mode?: PublishMode;
 }
 
 export interface ResolvedPublishAtlasOptions extends Pick<AtlasOptions, 'maxSize' | 'fast' | 'allowRotation' | 'padding' | 'powerOfTwo' | 'square' | 'multiPage' | 'trimImage' | 'extractAlpha'> {}
@@ -1005,19 +1014,21 @@ export function publish(options: PublishOptions): Transform {
 		}
 
 		// Step 2: Atlas packing
-		const atlasOpts: AtlasOptions = {
-			...resolved.atlas,
-			...(options.atlas ?? {}),
-			separatedAtlasForBranch: includeBranches && publishSettings.seperatedAtlasForBranch === true,
-			encoder: options.encoder,
-			basePath: options.basePath,
-			outputPath: options.fs ? options.output : undefined,
-			mkdir: options.fs ? options.fs.mkdir : undefined,
-			writeFileRaw: options.fs?.writeFileRaw,
-			readFileRaw: options.atlas?.readFileRaw ?? options.fs?.readFileRaw,
-			...atlasRuntimeOptions,
-		};
-		await atlas(atlasOpts)(doc);
+		if (options.mode !== 'definitions') {
+			const atlasOpts: AtlasOptions = {
+				...resolved.atlas,
+				...(options.atlas ?? {}),
+				separatedAtlasForBranch: includeBranches && publishSettings.seperatedAtlasForBranch === true,
+				encoder: options.encoder,
+				basePath: options.basePath,
+				outputPath: options.fs ? options.output : undefined,
+				mkdir: options.fs ? options.fs.mkdir : undefined,
+				writeFileRaw: options.fs?.writeFileRaw,
+				readFileRaw: options.atlas?.readFileRaw ?? options.fs?.readFileRaw,
+				...atlasRuntimeOptions,
+			};
+			await atlas(atlasOpts)(doc);
+		}
 
 		// Step 3: Write .fui binary per package
 		if (!options.fs) {
