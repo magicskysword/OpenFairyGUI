@@ -229,14 +229,21 @@ export class BinaryWriter {
 	}
 
 	async write(doc: Document, filePath: string, options: BinaryWriterOptions = {}): Promise<void> {
+		const data = this.serialize(doc, options);
+		await this._fs.writeFileRaw(filePath, data);
+	}
+
+	/**
+	 * Serializes one package into FairyGUI runtime bytes without writing a file.
+	 */
+	serialize(doc: Document, options: BinaryWriterOptions = {}): Uint8Array {
 		const packages = doc.getRoot().listPackages();
 		if (packages.length === 0) throw new Error('Document has no packages to write.');
 
 		const idx = options.packageIndex ?? 0;
 		const pkg = packages[idx];
 		if (!pkg) throw new Error(`Package index ${idx} out of range (${packages.length} packages).`);
-		const data = this._serializePackage(doc, pkg, options);
-		await this._fs.writeFileRaw(filePath, data);
+		return this._serializePackage(doc, pkg, options);
 	}
 
 	private _serializePackage(doc: Document, pkg: Package, options: BinaryWriterOptions): Uint8Array {
