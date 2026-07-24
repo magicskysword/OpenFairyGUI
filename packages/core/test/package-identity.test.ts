@@ -48,6 +48,7 @@ test('npm trusted publishing is tokenless, version-gated, and dependency ordered
 	t.regex(workflow, /id-token:\s*write/);
 	t.regex(workflow, /contents:\s*read/);
 	t.regex(workflow, /actions\/checkout@v6/);
+	t.regex(workflow, /submodules:\s*recursive/);
 	t.regex(workflow, /actions\/setup-node@v6/);
 	t.regex(workflow, /node-version:\s*['"]24['"]/);
 	t.regex(workflow, /package-manager-cache:\s*false/);
