@@ -27,6 +27,8 @@ import type {
 } from './shared-types.js';
 import { createTransform } from './utils.js';
 
+export type PublishMode = 'full' | 'definitions';
+
 export interface PublishOptions {
 	/**
 	 * Output directory override for published files (.fui + atlas PNGs).
@@ -93,6 +95,13 @@ export interface PublishOptions {
 	 * Run generic code generation after runtime artifacts. Default: true.
 	 */
 	codeGeneration?: boolean;
+
+	/**
+	 * Full publish packs atlases before writing runtime artifacts.
+	 * Definitions publish skips atlas packing and leaves existing atlas files untouched.
+	 * Default: 'full'.
+	 */
+	mode?: PublishMode;
 }
 
 export interface ResolvedPublishAtlasOptions
@@ -1261,20 +1270,22 @@ export function publish(options: PublishOptions): Transform {
 				);
 			}
 
-			const atlasRuntimeOptions = resolvePublishAtlasRuntimeOptions(plan.fileExtension);
-			await atlas({
-				...plan.atlas,
-				...(options.atlas ?? {}),
-				separatedAtlasForBranch: plan.separatedAtlasForBranch,
-				encoder: options.encoder,
-				basePath: options.basePath,
-				outputPath: options.fs ? plan.outputDir : undefined,
-				mkdir: options.fs ? options.fs.mkdir : undefined,
-				readFileRaw: options.atlas?.readFileRaw ?? options.fs?.readFileRaw,
-				strictOutput: options.fs !== undefined,
-				packages: [plan.pkg.getName()],
-				...atlasRuntimeOptions,
-			})(doc);
+			if (options.mode !== 'definitions') {
+				const atlasRuntimeOptions = resolvePublishAtlasRuntimeOptions(plan.fileExtension);
+				await atlas({
+					...plan.atlas,
+					...(options.atlas ?? {}),
+					separatedAtlasForBranch: plan.separatedAtlasForBranch,
+					encoder: options.encoder,
+					basePath: options.basePath,
+					outputPath: options.fs ? plan.outputDir : undefined,
+					mkdir: options.fs ? options.fs.mkdir : undefined,
+					readFileRaw: options.atlas?.readFileRaw ?? options.fs?.readFileRaw,
+					strictOutput: options.fs !== undefined,
+					packages: [plan.pkg.getName()],
+					...atlasRuntimeOptions,
+				})(doc);
+			}
 
 			if (!options.fs) return;
 
