@@ -211,6 +211,63 @@ test('atlas: trimImage keeps fully transparent images as zero-sized sprites', as
 	}
 });
 
+test('atlas: rasterizes SVG sources to their declared FairyGUI size before trimming', async (t) => {
+	const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'openfairygui-atlas-svg-'));
+	const imageDir = path.join(tmpDir, 'Icons');
+	const imagePath = path.join(imageDir, 'cursor.svg');
+
+	try {
+		await fs.mkdir(imageDir, { recursive: true });
+		await fs.writeFile(
+			imagePath,
+			`<svg xmlns="http://www.w3.org/2000/svg" width="86" height="128" viewBox="0 0 86 128">
+  <rect width="86" height="128" fill="#ffffff"/>
+</svg>`,
+			'utf8',
+		);
+
+		const doc = new Document();
+		const pkg = doc.createPackage('Icons');
+		pkg.setId('icons001');
+		const image = doc.createImageResource('cursor');
+		image
+			.setId('cursor1')
+			.setPath('/')
+			.setWidth(16)
+			.setHeight(16)
+			.setExported(true)
+			.setExtras({ ...image.getExtras(), _fileName: 'cursor.svg' });
+		pkg.addResource(image);
+
+		await doc.transform(atlas({
+			encoder: sharp,
+			basePath: tmpDir,
+			outputPath: tmpDir,
+			mkdir: async (dir) => {
+				await fs.mkdir(dir, { recursive: true });
+			},
+			trimImage: true,
+			powerOfTwo: true,
+			maxSize: 64,
+		}));
+
+		const sprite = pkg.listAtlases()
+			.flatMap((atlasNode) => atlasNode.listSprites())
+			.find((entry) => entry.getItemId() === 'cursor1');
+		t.truthy(sprite);
+		t.is(sprite?.getRectWidth(), 16);
+		t.is(sprite?.getRectHeight(), 16);
+		t.is(sprite?.getOriginalWidth(), 16);
+		t.is(sprite?.getOriginalHeight(), 16);
+
+		const atlasMetadata = await sharp(path.join(tmpDir, 'Icons_atlas0.png')).metadata();
+		t.true((atlasMetadata.width ?? 0) <= 64);
+		t.true((atlasMetadata.height ?? 0) <= 64);
+	} finally {
+		await fs.rm(tmpDir, { recursive: true, force: true });
+	}
+});
+
 test('atlas: direct single PNG output keeps portrait sprite unrotated for Unity bytes', async (t) => {
 	const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'openfairygui-atlas-direct-'));
 	const imageDir = path.join(tmpDir, 'BundleUsage');

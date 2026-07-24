@@ -236,6 +236,7 @@ interface AtlasEncoderPipeline {
 	png(): AtlasEncoderPipeline;
 	metadata(): Promise<AtlasEncoderMetadata>;
 	rotate(angle: number): AtlasEncoderPipeline;
+	resize(options: { width: number; height: number; fit: 'fill' }): AtlasEncoderPipeline;
 	composite(inputs: AtlasCompositeInput[]): AtlasEncoderPipeline;
 	toFile(path: string): Promise<unknown>;
 }
@@ -670,8 +671,8 @@ export function atlas(_options: AtlasOptions = {}): Transform {
 							try {
 								let imgBuffer: Uint8Array;
 
-								if (input.trimBuffer) {
-									imgBuffer = input.trimBuffer;
+								if (input.sourceBuffer) {
+									imgBuffer = input.sourceBuffer;
 									if (imgBuffer.length === 0) continue;
 								} else {
 									if (!isImageResource(input.resource)) {
@@ -954,12 +955,12 @@ interface ExtractedJtaData {
  */
 async function _trimImage(
 	encoder: AtlasEncoder,
-	filePath: string,
+	source: string | Uint8Array,
 	originalWidth: number,
 	originalHeight: number,
 ): Promise<TrimInfo> {
 	try {
-		const trimResult = await encoder(filePath)
+		const trimResult = await encoder(source)
 			.ensureAlpha()
 			.raw()
 			.toBuffer({ resolveWithObject: true });
@@ -1000,7 +1001,7 @@ async function _trimImage(
 
 		const trimmedWidth = maxX - minX + 1;
 		const trimmedHeight = maxY - minY + 1;
-		const buffer = await encoder(filePath)
+		const buffer = await encoder(source)
 			.extract({
 				left: minX,
 				top: minY,
@@ -1020,7 +1021,7 @@ async function _trimImage(
 		};
 	} catch {
 		// Trim failed (e.g. JPEG without alpha, nothing to trim) — return original
-		const buf = await encoder(filePath).png().toBuffer();
+		const buf = await encoder(source).png().toBuffer();
 		return {
 			buffer: buf,
 			width: originalWidth,
@@ -1053,7 +1054,7 @@ type InputItem = {
 	id: string; width: number; height: number;
 	originalWidth: number; originalHeight: number;
 	offsetX: number; offsetY: number;
-	resource: PackInputResource; trimBuffer?: Uint8Array;
+	resource: PackInputResource; sourceBuffer?: Uint8Array;
 	sourceKind: 'image' | 'movieclip-frame';
 };
 
@@ -1070,9 +1071,11 @@ async function _collectImage(
 	let origW = resource.getWidth() ?? 0;
 	let origH = resource.getHeight() ?? 0;
 	let sourceHasAlpha = false;
+	let sourceBuffer: Uint8Array | undefined;
+	let filePath: string | undefined;
 
 	if (encoder && options.basePath) {
-		const filePath = _resolveImagePath(resource, pkg, options.basePath);
+		filePath = _resolveImagePath(resource, pkg, options.basePath);
 		try {
 			const metadata = await encoder(filePath).metadata();
 			if (origW === 0 || origH === 0) {
@@ -1082,9 +1085,20 @@ async function _collectImage(
 				resource.setHeight(origH);
 			}
 			sourceHasAlpha = metadata.hasAlpha === true || metadata.channels === 4;
+			if (filePath.toLowerCase().endsWith('.svg') && origW > 0 && origH > 0) {
+				sourceBuffer = await encoder(filePath)
+					.resize({ width: origW, height: origH, fit: 'fill' })
+					.png()
+					.toBuffer();
+				sourceHasAlpha = true;
+			}
 		} catch {
 			if (origW === 0 || origH === 0) {
 				logger.warn(`atlas: Could not read image "${filePath}", skipping.`);
+				return;
+			}
+			if (filePath.toLowerCase().endsWith('.svg')) {
+				logger.warn(`atlas: Could not rasterize SVG "${filePath}", skipping.`);
 				return;
 			}
 		}
@@ -1093,17 +1107,19 @@ async function _collectImage(
 	if (origW <= 0 || origH <= 0) return;
 
 	let packW = origW, packH = origH, offX = 0, offY = 0;
-	let trimBuf: Uint8Array | undefined;
-
-	if (doTrim && sourceHasAlpha && options.basePath && encoder) {
-		const filePath = _resolveImagePath(resource, pkg, options.basePath);
+	if (doTrim && sourceHasAlpha && filePath && encoder) {
 		try {
-			const trimResult = await _trimImage(encoder, filePath, origW, origH);
+			const trimResult = await _trimImage(
+				encoder,
+				sourceBuffer ?? filePath,
+				origW,
+				origH,
+			);
 			packW = trimResult.width;
 			packH = trimResult.height;
 			offX = trimResult.offsetX;
 			offY = trimResult.offsetY;
-			trimBuf = trimResult.buffer;
+			sourceBuffer = trimResult.buffer;
 		} catch {
 			logger.warn(`atlas: Could not trim "${filePath}", using original.`);
 		}
@@ -1114,7 +1130,7 @@ async function _collectImage(
 		originalWidth: origW, originalHeight: origH,
 		offsetX: offX, offsetY: offY,
 		resource,
-		trimBuffer: trimBuf,
+		sourceBuffer,
 		sourceKind: 'image',
 	});
 }
@@ -1232,7 +1248,7 @@ async function _createMovieClipFrameInput(
 			offsetX: 0,
 			offsetY: 0,
 			resource,
-			trimBuffer: buffer,
+			sourceBuffer: buffer,
 			sourceKind: 'movieclip-frame',
 		};
 	} catch {
