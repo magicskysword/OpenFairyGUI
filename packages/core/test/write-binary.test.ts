@@ -3,7 +3,8 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { getFixturePath } from '@openfairygui/test-utils';
-import { Document, NodeIO, PropertyType } from '../src/index.js';
+import { Document, PropertyType } from '../src/index.js';
+import { NodeIO } from '../src/node.js';
 
 const BASICS_FUI = getFixturePath(
 	'FairyGUI-unity',
@@ -1105,9 +1106,9 @@ test('binary writer: misc/spine/dragonbones resources round-trip as formal packa
 				.sort((a, b) => (a.id ?? '').localeCompare(b.id ?? ''))
 				.map((item) => ({ type: item.type, id: item.id, file: item.file })),
 			[
-				{ type: 9, id: 'dragon001', file: 'dragon_ske.json' },
+				{ type: 10, id: 'dragon001', file: 'dragon_ske.json' },
 				{ type: 7, id: 'misc001', file: 'alien-pma.atlas' },
-				{ type: 8, id: 'spine001', file: 'alien-pro.skel' },
+				{ type: 9, id: 'spine001', file: 'alien-pro.skel' },
 			],
 		);
 
@@ -1210,6 +1211,44 @@ test('binary writer: branch metadata round-trips as package-level branches and i
 		t.deepEqual(mainImage2.getBranchItemIds?.(), ['devFace']);
 		t.is(devImage2.getBranch?.(), 'dev');
 		t.deepEqual(devImage2.getBranchItemIds?.(), []);
+	} finally {
+		await fs.rm(tmpDir, { recursive: true, force: true });
+	}
+});
+
+test('binary writer: image high-resolution item ids round-trip as formal properties', async (t) => {
+	const doc = new Document();
+	const pkg = doc.createPackage('HiResPkg');
+	pkg.setId('hirespkg');
+
+	const image = doc.createImageResource('icon.png');
+	image.setId('icon01').setWidth(16).setHeight(16).setHighResolutionItemIds(['icon2x', null, 'icon4x']);
+	pkg.addResource(image);
+
+	const image2x = doc.createImageResource('icon@2x.png');
+	image2x.setId('icon2x').setWidth(32).setHeight(32);
+	pkg.addResource(image2x);
+
+	const image4x = doc.createImageResource('icon@4x.png');
+	image4x.setId('icon4x').setWidth(64).setHeight(64);
+	pkg.addResource(image4x);
+
+	const io = new NodeIO();
+	const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'openfairygui-bw-'));
+	const outPath = path.join(tmpDir, 'high_resolution.bytes');
+
+	try {
+		await io.writeBinary(doc, outPath);
+
+		const roundTripped = await io.readBinary(outPath);
+		const decodedImage = roundTripped
+			.getRoot()
+			.getPackage('HiResPkg')
+			?.listResources()
+			.find((resource) => resource.getId?.() === 'icon01') as any;
+
+		t.truthy(decodedImage, 'base image exists after round-trip');
+		t.deepEqual(decodedImage?.getHighResolutionItemIds?.(), ['icon2x', null, 'icon4x']);
 	} finally {
 		await fs.rm(tmpDir, { recursive: true, force: true });
 	}
@@ -1889,6 +1928,53 @@ test('binary writer: component child blocks round-trip into formal child propert
 	}
 });
 
+test('binary writer: button component instances preserve instance sound properties', async (t) => {
+	const doc = new Document();
+	const pkg = doc.createPackage('SoundPkg');
+	pkg.setId('soundpkg');
+
+	const sound = doc.createSoundResource('click.wav');
+	sound.setId('click001').setPath('/audio/').setFile('click.wav');
+	pkg.addResource(sound);
+
+	const buttonDefinition = doc.createComponent('ButtonDefinition');
+	buttonDefinition.setId('btnDef001').setExtensionType('Button');
+	pkg.addResource(buttonDefinition);
+
+	const host = doc.createComponent('Host');
+	host.setId('host001').setSize(320, 200);
+	const buttonInstance = doc.createGComponent('buttonInstance');
+	buttonInstance
+		.setId('n0')
+		.setSrc('btnDef001')
+		.setInstanceExtType('Button')
+		.setInstanceSound('ui://soundpkgclick001')
+		.setInstanceSoundVolumeScale(0.35);
+	host.addChild(buttonInstance);
+	pkg.addResource(host);
+
+	const io = new NodeIO();
+	const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'openfairygui-button-instance-sound-'));
+	const outPath = path.join(tmpDir, 'button_instance_sound.fui');
+
+	try {
+		await io.writeBinary(doc, outPath);
+
+		const roundTripped = await io.readBinary(outPath);
+		const decodedHost = roundTripped.getRoot().getPackage('SoundPkg')?.getComponent('Host');
+		const decodedButton = decodedHost?.listChildren().find((child) => child.getId() === 'n0') as ReturnType<Document['createGComponent']>;
+		t.truthy(decodedButton, 'button component instance is decoded');
+		t.is(decodedButton.getInstanceExtType(), 'Button');
+		t.is(decodedButton.getInstanceSound(), 'ui://soundpkgclick001');
+		t.true(
+			Math.abs(decodedButton.getInstanceSoundVolumeScale() - 0.35) < 1e-6,
+			'instance sound volume is decoded from the extension block',
+		);
+	} finally {
+		await fs.rm(tmpDir, { recursive: true, force: true });
+	}
+});
+
 test('binary writer: list and tree child blocks round-trip into formal list properties', async (t) => {
 	const doc = new Document();
 	const pkg = doc.createPackage('ListPkg');
@@ -1910,6 +1996,7 @@ test('binary writer: list and tree child blocks round-trip into formal list prop
 	const list = doc.createGList('mainList');
 	list
 		.setId('list01')
+		.setCustomData('list-custom')
 		.setSrc('ui://listpkg/list')
 		.setLayout(4)
 		.setSelectionMode(1)
@@ -1963,6 +2050,7 @@ test('binary writer: list and tree child blocks round-trip into formal list prop
 	const tree = doc.createGTree('tree');
 	tree
 		.setId('tree01')
+		.setCustomData('tree-custom')
 		.setSrc('ui://listpkg/tree')
 		.setLayout(0)
 		.setLineGap(4)
@@ -2017,6 +2105,7 @@ test('binary writer: list and tree child blocks round-trip into formal list prop
 
 		const decodedList = decodedComp?.listChildren().find((child) => child.getId() === 'list01') as ReturnType<Document['createGList']>;
 		t.truthy(decodedList, 'list child exists');
+		t.is(decodedList.getCustomData(), 'list-custom');
 		t.is(decodedList.getLayout(), 4);
 		t.is(decodedList.getSelectionMode(), 1);
 		t.is(decodedList.getAlign(), 2);
@@ -2067,6 +2156,7 @@ test('binary writer: list and tree child blocks round-trip into formal list prop
 
 		const decodedTree = decodedComp?.listChildren().find((child) => child.getId() === 'tree01') as ReturnType<Document['createGTree']>;
 		t.truthy(decodedTree, 'tree child exists');
+		t.is(decodedTree.getCustomData(), 'tree-custom');
 		t.is(decodedTree.getDefaultItem(), 'ui://listpkg/treeItem');
 		t.is(decodedTree.getOverflow(), 2);
 		t.is(decodedTree.getScrollType(), 1);

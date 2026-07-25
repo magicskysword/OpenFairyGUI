@@ -817,6 +817,23 @@ export interface FileSystem {
 	exists(path: string): Promise<boolean>;
 	join(...paths: string[]): string;
 	dirname(path: string): string;
+	/** Removes a file when the adapter supports project-source cleanup. */
+	unlink?(path: string): Promise<void>;
+}
+
+/** Options for explicitly loading source bytes while reading a project. */
+export interface ProjectReadOptions {
+	/**
+	 * Load primary source bytes for image, sound, misc, font, movie-clip,
+	 * Spine, and DragonBones resources. Disabled by default to keep normal
+	 * inspection reads lightweight.
+	 */
+	hydrateResourceBytes?: boolean;
+}
+
+function getProjectBasePath(fs: FileSystem, projectPath: string): string {
+	const basePath = fs.dirname(projectPath);
+	return basePath === '.' ? '' : basePath;
 }
 
 export class ProjectReader {
@@ -826,10 +843,11 @@ export class ProjectReader {
 		this._fs = fs;
 	}
 
-	async read(projectPath: string): Promise<Document> {
+	async read(projectPath: string, options: ProjectReadOptions = {}): Promise<Document> {
 		const fs = this._fs;
 		const doc = new Document();
-		const basePath = projectPath.replace(/[/\\][^/\\]*\.fairy$/i, '');
+		const basePath = getProjectBasePath(fs, projectPath);
+		doc.setProjectDir(basePath);
 		const ctx = new ReaderContext(doc, basePath);
 
 		// 1. Parse .fairy file
@@ -863,10 +881,10 @@ export class ProjectReader {
 			const pkgXmlPath = fs.join(assetsPath, dirName, 'package.xml');
 			if (!(await fs.exists(pkgXmlPath))) continue;
 
-			await this._readPackage(ctx, dirName, pkgXmlPath);
+			await this._readPackage(ctx, dirName, pkgXmlPath, '', options);
 		}
 
-		const branchNames = await this._readPackageBranches(ctx);
+		const branchNames = await this._readPackageBranches(ctx, options);
 		if (branchNames.length > 0) {
 			doc.getRoot().setBranches(branchNames);
 		}
@@ -889,7 +907,7 @@ export class ProjectReader {
 		return doc;
 	}
 
-	private async _readPackageBranches(ctx: ReaderContext): Promise<string[]> {
+	private async _readPackageBranches(ctx: ReaderContext, options: ProjectReadOptions): Promise<string[]> {
 		const fs = this._fs;
 		let dirNames: string[] = [];
 		try {
@@ -915,7 +933,7 @@ export class ProjectReader {
 			for (const dirName of packageDirs) {
 				const pkgXmlPath = fs.join(branchAssetsPath, dirName, 'package_branch.xml');
 				if (!(await fs.exists(pkgXmlPath))) continue;
-				await this._readPackage(ctx, dirName, pkgXmlPath, branchName);
+				await this._readPackage(ctx, dirName, pkgXmlPath, branchName, options);
 			}
 		}
 
@@ -954,6 +972,7 @@ export class ProjectReader {
 		dirName: string,
 		pkgXmlPath: string,
 		branchName = '',
+		options: ProjectReadOptions = {},
 	): Promise<void> {
 		const fs = this._fs;
 		const content = await fs.readFile(pkgXmlPath);
@@ -1031,11 +1050,14 @@ export class ProjectReader {
 				if (resource) createdResources.push(resource);
 			}
 			await this._hydratePackageImageSizes(createdResources, packageDir);
+			if (options.hydrateResourceBytes) {
+				await this._hydratePackageResourceBytes(ctx.document, createdResources, packageDir);
+			}
 			return;
 		}
 
 		// Fallback for non-standard XML parser output.
-		for (const tagName of ['image', 'component', 'font', 'sound', 'movieclip', 'swf', 'misc', 'atlas']) {
+		for (const tagName of ['image', 'component', 'font', 'sound', 'movieclip', 'spine', 'dragonbones', 'swf', 'misc', 'atlas']) {
 			const items = ensureArray(resources[tagName]);
 			for (const item of items) {
 				const attrs = getXmlNode<ResourceXmlAttrs>(item);
@@ -1045,6 +1067,9 @@ export class ProjectReader {
 			}
 		}
 		await this._hydratePackageImageSizes(createdResources, packageDir);
+		if (options.hydrateResourceBytes) {
+			await this._hydratePackageResourceBytes(ctx.document, createdResources, packageDir);
+		}
 	}
 
 	private async _hydratePackageImageSizes(
@@ -1059,7 +1084,9 @@ export class ProjectReader {
 			const fileName = image.getFileName?.() ?? '';
 			if (!fileName) continue;
 			const resourcePath = image.getPath?.() ?? '/';
-			const filePath = fs.join(packageDir, resourcePath.replace(/^\//, ''), fileName);
+			const sourcePath = this._packageRelativeSourcePath(resourcePath, fileName);
+			if (!sourcePath) continue;
+			const filePath = fs.join(packageDir, sourcePath.replace(/^\/+/, ''));
 			if (!(await fs.exists(filePath))) continue;
 			try {
 				const size = readImageSize(await fs.readFileRaw(filePath));
@@ -1070,6 +1097,61 @@ export class ProjectReader {
 				// Ignore unreadable image files and keep XML-provided values only.
 			}
 		}
+	}
+
+	private async _hydratePackageResourceBytes(
+		doc: Document,
+		resources: Array<ReturnType<Package['listResources']>[number]>,
+		packageDir: string,
+	): Promise<void> {
+		const fs = this._fs;
+		for (const resource of resources) {
+			const fileName = this._primaryResourceFileName(resource);
+			if (!fileName) continue;
+			const resourcePath = (resource as { getPath?(): string }).getPath?.() ?? '/';
+			const sourcePath = this._packageRelativeSourcePath(resourcePath, fileName);
+			if (!sourcePath) continue;
+			const filePath = fs.join(packageDir, sourcePath.replace(/^\/+/, ''));
+			if (!(await fs.exists(filePath))) continue;
+			try {
+				const data = new Uint8Array(await fs.readFileRaw(filePath));
+				const buffer = doc.createBuffer().setURI(sourcePath).setData(data);
+				(this._asSourceDataResource(resource)).setSourceData(buffer);
+			} catch {
+				// Keep resource metadata available when its primary source cannot be read.
+			}
+		}
+	}
+
+	private _primaryResourceFileName(resource: ReturnType<Package['listResources']>[number]): string {
+		switch (resource.propertyType) {
+			case 'ImageResource':
+			case 'FontResource':
+			case 'MovieClipResource':
+				return (resource as { getFileName(): string }).getFileName();
+			case 'SoundResource':
+			case 'MiscResource':
+			case 'SpineResource':
+			case 'DragonBonesResource':
+				return (resource as { getFile(): string }).getFile();
+			default:
+				return '';
+		}
+	}
+
+	private _packageRelativeSourcePath(resourcePath: string, fileName: string): string | null {
+		if (!fileName || /[\\/:]/.test(fileName) || fileName === '.' || fileName === '..') return null;
+		const segments = resourcePath.replace(/\\/g, '/').split('/').filter(Boolean);
+		if (segments.some((segment) => segment === '.' || segment === '..' || segment.includes(':'))) return null;
+		return `/${[...segments, fileName].join('/')}`;
+	}
+
+	private _asSourceDataResource(resource: ReturnType<Package['listResources']>[number]): {
+		setSourceData(buffer: ReturnType<Document['createBuffer']>): unknown;
+	} {
+		return resource as unknown as {
+			setSourceData(buffer: ReturnType<Document['createBuffer']>): unknown;
+		};
 	}
 
 	private _createResourceFromXML(
@@ -1225,6 +1307,8 @@ export class ProjectReader {
 				res.setBranch(branchName);
 				res.setFileName(name);
 				res.setExported(exported);
+				const textureSetMode = readXmlAttr<string>(attrs, PROJECT_XML_PROTOCOL.packageMovieClipResource.attrs.atlas);
+				if (textureSetMode !== undefined) res.setTextureSetMode(textureSetMode);
 				pkg.addResource(res);
 				ctx.registerResource(pkg.getId(), id, res);
 				return res;
@@ -1707,6 +1791,16 @@ export class ProjectReader {
 				}
 				const textGroup = readXmlAttr<string>(attrs, PROJECT_XML_PROTOCOL.text.attrs.group);
 				if (textGroup) g.setGroup(textGroup);
+				const textRotation = readXmlAttr<string | number>(attrs, PROJECT_XML_PROTOCOL.text.attrs.rotation);
+				if (textRotation !== undefined) g.setRotation(parseFloat2(textRotation));
+				const textAlpha = readXmlAttr<string | number>(attrs, PROJECT_XML_PROTOCOL.text.attrs.alpha);
+				if (textAlpha !== undefined) g.setAlpha(parseFloat2(textAlpha, 1));
+				const textVisible = readXmlAttr<string | boolean>(attrs, PROJECT_XML_PROTOCOL.text.attrs.visible);
+				if (textVisible !== undefined) g.setVisible(parseBool(textVisible));
+				const textTouchable = readXmlAttr<string | boolean>(attrs, PROJECT_XML_PROTOCOL.text.attrs.touchable);
+				if (textTouchable !== undefined) g.setTouchable(parseBool(textTouchable));
+				const textGrayed = readXmlAttr<string | boolean>(attrs, PROJECT_XML_PROTOCOL.text.attrs.grayed);
+				if (textGrayed !== undefined) g.setGrayed(parseBool(textGrayed));
 				const textCustomData = readXmlAttr<string>(attrs, PROJECT_XML_PROTOCOL.text.attrs.customData);
 				if (textCustomData !== undefined) g.setCustomData(textCustomData);
 				const textValue = readXmlAttr<string>(attrs, PROJECT_XML_PROTOCOL.text.attrs.text);
@@ -1818,6 +1912,16 @@ export class ProjectReader {
 				}
 				const richTextGroup = readXmlAttr<string>(attrs, PROJECT_XML_PROTOCOL.text.attrs.group);
 				if (richTextGroup) g.setGroup(richTextGroup);
+				const richTextRotation = readXmlAttr<string | number>(attrs, PROJECT_XML_PROTOCOL.richText.attrs.rotation);
+				if (richTextRotation !== undefined) g.setRotation(parseFloat2(richTextRotation));
+				const richTextAlpha = readXmlAttr<string | number>(attrs, PROJECT_XML_PROTOCOL.richText.attrs.alpha);
+				if (richTextAlpha !== undefined) g.setAlpha(parseFloat2(richTextAlpha, 1));
+				const richTextVisible = readXmlAttr<string | boolean>(attrs, PROJECT_XML_PROTOCOL.richText.attrs.visible);
+				if (richTextVisible !== undefined) g.setVisible(parseBool(richTextVisible));
+				const richTextTouchable = readXmlAttr<string | boolean>(attrs, PROJECT_XML_PROTOCOL.richText.attrs.touchable);
+				if (richTextTouchable !== undefined) g.setTouchable(parseBool(richTextTouchable));
+				const richTextGrayed = readXmlAttr<string | boolean>(attrs, PROJECT_XML_PROTOCOL.richText.attrs.grayed);
+				if (richTextGrayed !== undefined) g.setGrayed(parseBool(richTextGrayed));
 				const richText = readXmlAttr<string>(attrs, PROJECT_XML_PROTOCOL.text.attrs.text);
 				if (richText !== undefined) g.setText(String(richText));
 				const richTextFontSize = readXmlAttr<string | number>(attrs, PROJECT_XML_PROTOCOL.text.attrs.fontSize);
@@ -1899,6 +2003,16 @@ export class ProjectReader {
 				}
 				const inputGroup = readXmlAttr<string>(attrs, PROJECT_XML_PROTOCOL.text.attrs.group);
 				if (inputGroup) g.setGroup(inputGroup);
+				const inputRotation = readXmlAttr<string | number>(attrs, PROJECT_XML_PROTOCOL.textInput.attrs.rotation);
+				if (inputRotation !== undefined) g.setRotation(parseFloat2(inputRotation));
+				const inputAlpha = readXmlAttr<string | number>(attrs, PROJECT_XML_PROTOCOL.textInput.attrs.alpha);
+				if (inputAlpha !== undefined) g.setAlpha(parseFloat2(inputAlpha, 1));
+				const inputVisible = readXmlAttr<string | boolean>(attrs, PROJECT_XML_PROTOCOL.textInput.attrs.visible);
+				if (inputVisible !== undefined) g.setVisible(parseBool(inputVisible));
+				const inputTouchable = readXmlAttr<string | boolean>(attrs, PROJECT_XML_PROTOCOL.textInput.attrs.touchable);
+				if (inputTouchable !== undefined) g.setTouchable(parseBool(inputTouchable));
+				const inputGrayed = readXmlAttr<string | boolean>(attrs, PROJECT_XML_PROTOCOL.textInput.attrs.grayed);
+				if (inputGrayed !== undefined) g.setGrayed(parseBool(inputGrayed));
 				const inputText = readXmlAttr<string>(attrs, PROJECT_XML_PROTOCOL.text.attrs.text);
 				if (inputText !== undefined) g.setText(String(inputText));
 				const inputFontSize = readXmlAttr<string | number>(attrs, PROJECT_XML_PROTOCOL.text.attrs.fontSize);
@@ -2090,6 +2204,8 @@ export class ProjectReader {
 				}
 				const loaderGrayed = readXmlAttr<string | boolean>(attrs, PROJECT_XML_PROTOCOL.loader.attrs.grayed);
 				if (loaderGrayed !== undefined) g.setGrayed(parseBool(loaderGrayed));
+				const loaderVisible = readXmlAttr<string | boolean>(attrs, PROJECT_XML_PROTOCOL.loader.attrs.visible);
+				if (loaderVisible !== undefined) g.setVisible(parseBool(loaderVisible));
 				const loaderUrl = readXmlAttr<string>(attrs, PROJECT_XML_PROTOCOL.loader.attrs.url);
 				if (loaderUrl) g.setUrl(loaderUrl);
 				const loaderAlign = readXmlAttr<string>(attrs, PROJECT_XML_PROTOCOL.loader.attrs.align);
@@ -2147,6 +2263,8 @@ export class ProjectReader {
 					const [w, h] = parseSizeString(loader3dSize);
 					g.setSize(w, h);
 				}
+				const loader3dVisible = readXmlAttr<string | boolean>(attrs, PROJECT_XML_PROTOCOL.loader3D.attrs.visible);
+				if (loader3dVisible !== undefined) g.setVisible(parseBool(loader3dVisible));
 				const loader3dUrl = readXmlAttr<string>(attrs, PROJECT_XML_PROTOCOL.loader3D.attrs.url);
 				if (loader3dUrl) g.setUrl(loader3dUrl);
 				const loader3dAlign = readXmlAttr<string>(attrs, PROJECT_XML_PROTOCOL.loader3D.attrs.align);
@@ -2327,6 +2445,8 @@ export class ProjectReader {
 				}
 				const listGroup = readXmlAttr<string>(attrs, PROJECT_XML_PROTOCOL.list.attrs.group);
 				if (listGroup) g.setGroup(listGroup);
+				const listVisible = readXmlAttr<string | boolean>(attrs, PROJECT_XML_PROTOCOL.list.attrs.visible);
+				if (listVisible !== undefined) g.setVisible(parseBool(listVisible));
 				const listTouchable = readXmlAttr<string | boolean>(attrs, PROJECT_XML_PROTOCOL.list.attrs.touchable);
 				if (listTouchable !== undefined) g.setTouchable(parseBool(listTouchable));
 				const defaultItem = readXmlAttr<string>(attrs, PROJECT_XML_PROTOCOL.list.attrs.defaultItem);
@@ -2507,6 +2627,10 @@ export class ProjectReader {
 				if (page !== undefined) componentObj.setInstancePage?.(page);
 				const checked = extSpecs.checked ? readXmlAttr<string | boolean>(extAttrs, extSpecs.checked) : undefined;
 				if (checked !== undefined) componentObj.setInstanceChecked?.(parseBool(checked));
+				const sound = extSpecs.sound ? readXmlAttr<string>(extAttrs, extSpecs.sound) : undefined;
+				if (sound !== undefined) componentObj.setInstanceSound?.(sound);
+				const soundVolumeScale = extSpecs.soundVolumeScale ? readXmlAttr<string | number>(extAttrs, extSpecs.soundVolumeScale) : undefined;
+				if (soundVolumeScale !== undefined) componentObj.setInstanceSoundVolumeScale?.(parseFloat2(soundVolumeScale, 1));
 				const prompt = extSpecs.prompt ? readXmlAttr<string>(extAttrs, extSpecs.prompt) : undefined;
 				if (prompt !== undefined) componentObj.setInstancePromptText?.(prompt);
 				const selectionController = extSpecs.selectionController ? readXmlAttr<string>(extAttrs, extSpecs.selectionController) : undefined;

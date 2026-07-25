@@ -66,12 +66,13 @@ test('npm trusted publishing is tokenless, version-gated, and dependency ordered
 	t.notRegex(workflow, /NODE_AUTH_TOKEN|NPM_TOKEN|--provenance/);
 });
 
-test('legacy fork release workflow is removed', async (t) => {
-	const legacyWorkflow = new URL(
-		'../../../.github/workflows/release.yml',
-		import.meta.url,
+test('upstream release workflow is retained for upstream-compatible branches', async (t) => {
+	const workflow = await fs.readFile(
+		new URL('../../../.github/workflows/release.yml', import.meta.url),
+		'utf8',
 	);
-	const error = await t.throwsAsync(fs.stat(legacyWorkflow));
 
-	t.is((error as NodeJS.ErrnoException).code, 'ENOENT');
+	t.regex(workflow, /name:\s*Release/);
+	t.regex(workflow, /tags:\s*\r?\n\s*-\s*['"]v\*['"]/);
+	t.regex(workflow, /workflow_dispatch/);
 });

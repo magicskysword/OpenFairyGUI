@@ -4,9 +4,9 @@ import os from 'node:os';
 import path from 'node:path';
 import {
 	inspectOpaqueProjectXml,
-	NodeIO,
 	type Document,
 } from '../src/index.js';
+import { NodeIO } from '../src/node.js';
 
 const PROJECT_XML = `<?xml version="1.0" encoding="utf-8"?>
 <projectDescription id="pivot-project" type="Unity" version="3.0"/>

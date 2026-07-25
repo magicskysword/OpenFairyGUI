@@ -1,0 +1,173 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: write
+  packages: write
+
+env:
+  NODE_VERSION: '24'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build workspace
+        run: pnpm build
+
+      # NOTE:
+      # The repository still contains a small number of local-only referer baselines
+      # outside git control. Release CI runs the repository-contained test subset here.
+      - name: Run release-safe test suite
+        run: >
+          pnpm exec ava --no-worker-threads
+          packages/core/test/read-project.test.ts
+          packages/core/test/write-project.test.ts
+          packages/core/test/restore-published-project.test.ts
+          packages/core/test/write-binary-pixel-hit-test.test.ts
+          packages/functions/test/atlas.test.ts
+          packages/functions/test/functions.test.ts
+          packages/functions/test/publish.test.ts
+          packages/backend/test/*.integration.test.ts
+          packages/mcp/test/*.test.ts
+
+      - name: Pack publish artifacts
+        run: |
+          mkdir -p .release
+          pack_package() {
+            local pkg_dir="$1"
+            (cd "${pkg_dir}" && pnpm pack --pack-destination ../../.release)
+          }
+          pack_package packages/core
+          pack_package packages/functions
+          pack_package packages/backend
+          pack_package packages/cli
+          pack_package packages/mcp
+
+      - name: Publish to npmjs
+        run: |
+          npm_dist_tag_for_version() {
+            local pkg_version="$1"
+            if [[ "${pkg_version}" == *-* ]]; then
+              echo "next"
+            else
+              echo "latest"
+            fi
+          }
+
+          package_tarball() {
+            local pkg_dir="$1"
+            local pkg_name
+            local pkg_version
+            local tarball_name
+            pkg_name=$(node -p "require('./${pkg_dir}/package.json').name")
+            pkg_version=$(node -p "require('./${pkg_dir}/package.json').version")
+            tarball_name="${pkg_name#@}"
+            tarball_name="${tarball_name//\//-}-${pkg_version}.tgz"
+            echo ".release/${tarball_name}"
+          }
+
+          publish_if_needed() {
+            local pkg_dir="$1"
+            local pkg_name
+            local pkg_version
+            local npm_dist_tag
+            local pkg_tarball
+            pkg_name=$(node -p "require('./${pkg_dir}/package.json').name")
+            pkg_version=$(node -p "require('./${pkg_dir}/package.json').version")
+            npm_dist_tag=$(npm_dist_tag_for_version "${pkg_version}")
+            pkg_tarball=$(package_tarball "${pkg_dir}")
+            if npm view "${pkg_name}@${pkg_version}" version --registry=https://registry.npmjs.org >/dev/null 2>&1; then
+              echo "Skipping npmjs publish for ${pkg_name}@${pkg_version} (already published)"
+            else
+              echo "Publishing ${pkg_name}@${pkg_version} to npmjs via trusted publishing with dist-tag ${npm_dist_tag}"
+              npm publish --provenance --access public --tag "${npm_dist_tag}" "${pkg_tarball}"
+            fi
+          }
+          publish_if_needed packages/core
+          publish_if_needed packages/functions
+          publish_if_needed packages/backend
+          publish_if_needed packages/cli
+          publish_if_needed packages/mcp
+
+      - name: Publish to GitHub Packages
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          npm config set @openfairygui:registry https://npm.pkg.github.com
+          npm config set //npm.pkg.github.com/:_authToken "$NODE_AUTH_TOKEN"
+          npm_dist_tag_for_version() {
+            local pkg_version="$1"
+            if [[ "${pkg_version}" == *-* ]]; then
+              echo "next"
+            else
+              echo "latest"
+            fi
+          }
+
+          package_tarball() {
+            local pkg_dir="$1"
+            local pkg_name
+            local pkg_version
+            local tarball_name
+            pkg_name=$(node -p "require('./${pkg_dir}/package.json').name")
+            pkg_version=$(node -p "require('./${pkg_dir}/package.json').version")
+            tarball_name="${pkg_name#@}"
+            tarball_name="${tarball_name//\//-}-${pkg_version}.tgz"
+            echo ".release/${tarball_name}"
+          }
+
+          publish_if_needed() {
+            local pkg_dir="$1"
+            local pkg_name
+            local pkg_version
+            local npm_dist_tag
+            local pkg_tarball
+            pkg_name=$(node -p "require('./${pkg_dir}/package.json').name")
+            pkg_version=$(node -p "require('./${pkg_dir}/package.json').version")
+            npm_dist_tag=$(npm_dist_tag_for_version "${pkg_version}")
+            pkg_tarball=$(package_tarball "${pkg_dir}")
+            if npm view "${pkg_name}@${pkg_version}" version --registry=https://npm.pkg.github.com >/dev/null 2>&1; then
+              echo "Skipping GitHub Packages publish for ${pkg_name}@${pkg_version} (already published)"
+            else
+              echo "Publishing ${pkg_name}@${pkg_version} to GitHub Packages with dist-tag ${npm_dist_tag}"
+              npm publish --tag "${npm_dist_tag}" "${pkg_tarball}" --registry=https://npm.pkg.github.com
+            fi
+          }
+          publish_if_needed packages/core
+          publish_if_needed packages/functions
+          publish_if_needed packages/backend
+          publish_if_needed packages/cli
+          publish_if_needed packages/mcp
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            .release/*.tgz

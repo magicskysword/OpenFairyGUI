@@ -3,7 +3,7 @@
 [![npm core version](https://img.shields.io/npm/v/@magicskysword/openfairygui-core.svg)](https://www.npmjs.com/package/@magicskysword/openfairygui-core)
 [![npm cli version](https://img.shields.io/npm/v/@openfairygui/cli.svg)](https://www.npmjs.com/package/@openfairygui/cli)
 [![License](https://img.shields.io/badge/license-MIT-007ec6.svg)](./LICENSE)
-[![GitHub](https://img.shields.io/badge/github-OpenFairyGUI%2FOpenFairyGUI-24292e.svg)](https://github.com/OpenFairyGUI/OpenFairyGUI)
+[![GitHub](https://img.shields.io/badge/github-magicskysword%2FOpenFairyGUI-24292e.svg)](https://github.com/magicskysword/OpenFairyGUI)
 
 [中文](./README.md)
 
@@ -18,8 +18,9 @@ Current capabilities include:
 - Reading and writing FairyGUI project directories
 - Reading and writing published binary packages
 - Inspecting and transforming the document model in code
-- Reconstructing editable FairyGUI projects from publish directories
+- Limited recovery from trusted local publish directories for diagnostics or migration assistance
 - Providing a scriptable CLI for automation
+- Exposing backend runtime capabilities through a thin MCP adapter
 
 ## Packages
 
@@ -29,8 +30,15 @@ This repository is organized as a `pnpm workspace` + `Lerna` monorepo with the f
 |---|---|
 | `@magicskysword/openfairygui-core` | Property graph, document model, project I/O, and binary I/O primitives |
 | `@magicskysword/openfairygui-functions` | Higher-level publish, restore, inspection, and transform workflows |
+| `@openfairygui/backend` | Stateful backend runtime, browser-safe project sessions, injectable async storage adapter, save/lock/capability coordination, and events/jobs/cache |
+| `@openfairygui/mcp` | Thin MCP server adapter that maps the full backend P2 tool surface and adds client ergonomics through resources, prompts, and output schemas |
 | `@openfairygui/cli` | Command-line interface |
 | `@openfairygui/test-utils` | Shared test helpers and fixtures |
+
+> Fork publishing note: this repository's automated release only publishes
+> `@magicskysword/openfairygui-core` and
+> `@magicskysword/openfairygui-functions`. Backend, MCP, CLI, and other packages
+> synchronized from upstream remain buildable source packages but are not released by this Fork.
 
 ## Scripting API
 
@@ -43,8 +51,9 @@ npm install --save @magicskysword/openfairygui-core @magicskysword/openfairygui-
 Typical usage reads a project into a `Document`, then inspects, transforms, publishes, or writes it back:
 
 ```ts
-import { NodeIO } from '@magicskysword/openfairygui-core';
-import { inspect, publish } from '@magicskysword/openfairygui-functions';
+import { NodeIO } from '@magicskysword/openfairygui-core/node';
+import { inspect } from '@magicskysword/openfairygui-functions';
+import { publishNode } from '@magicskysword/openfairygui-functions/node';
 
 const io = new NodeIO();
 const doc = await io.readProject('./MyProject/MyProject.fairy');
@@ -52,47 +61,123 @@ const doc = await io.readProject('./MyProject/MyProject.fairy');
 const report = inspect(doc);
 console.log(report.projectType, report.totals.packages);
 
-await doc.transform(publish({
+await publishNode({
+  document: doc,
   output: './release',
-}));
+  assetsPath: './MyProject/assets',
+});
 ```
 
-If you want to rebuild a project from published output, use the high-level restore workflow from `functions`:
+`publishNode` fails when it cannot produce a complete runtime artifact: missing Sharp, source images, resource copies, or packing failures do not report success. The lower-level `publish()` API is layout-only only when no output directory is requested; an output request requires filesystem capabilities.
+
+If you want to use the current **UAM authoring seam**, pass a `UamProject` plus an
+explicit operation batch into the thin application wrapper exposed by
+`@magicskysword/openfairygui-functions`. This `UAM-public / Document-private` path supports resource
+rename/move, byte-backed binary resource add/replace/remove, and add/update/remove for
+the currently modeled gear kinds; it is still not a general editing backend. Read source
+projects with `ProjectReader.read(path, { hydrateResourceBytes: true })` before binary
+resource editing. File-backed `BackendRuntime.openSession` performs that hydration
+automatically. It also compares the source project with the complete output of a UAM round trip.
+If persisted properties are not represented by the current UAM, the session reports
+`uamFidelity: 'unsupported'` and `saveSession / materializeSession` fail with
+`uam_fidelity_unsupported` without writing. Transactions, saves, and materialization are serialized
+per session.
 
 ```ts
-import { ProjectType } from '@magicskysword/openfairygui-core';
-import { restore } from '@magicskysword/openfairygui-functions';
-import fs from 'node:fs/promises';
-import path from 'node:path';
+import {
+	type UamProject,
+	type UamTransactionOperation,
+} from '@magicskysword/openfairygui-core';
+import { applyUamTransactionApp } from '@magicskysword/openfairygui-functions';
 
-await restore({
-  inputDir: './release',
-  output: './restored-project',
-  projectType: ProjectType.Unity,
-  fs: {
-    async readFile(filePath) { return fs.readFile(filePath, 'utf-8'); },
-    async readFileRaw(filePath) {
-      const buf = await fs.readFile(filePath);
-      return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
-    },
-    async writeFile(filePath, content) {
-      await fs.mkdir(path.dirname(filePath), { recursive: true });
-      await fs.writeFile(filePath, content, 'utf-8');
-    },
-    async writeFileRaw(filePath, data) {
-      await fs.mkdir(path.dirname(filePath), { recursive: true });
-      await fs.writeFile(filePath, data);
-    },
-    async mkdir(dirPath) { await fs.mkdir(dirPath, { recursive: true }); },
-    async readdir(dirPath) { return fs.readdir(dirPath); },
-    async exists(filePath) { try { await fs.access(filePath); return true; } catch { return false; } },
-    async isFile(filePath) { try { return (await fs.stat(filePath)).isFile(); } catch { return false; } },
-    async resolvePath(filePath) { try { return await fs.realpath(filePath); } catch { return path.resolve(filePath); } },
-    async rm(targetPath, options) { await fs.rm(targetPath, { recursive: options?.recursive ?? false, force: options?.force ?? false }); },
-    join: path.join,
-    dirname: path.dirname,
-  },
+const project: UamProject = /* project read and lifted with hydrateResourceBytes */;
+const operations: UamTransactionOperation[] = [
+	{
+		kind: 'renameResource',
+		selector: { packageId: 'pkg001', resourceId: 'img001' },
+		newName: 'renamed.png',
+	},
+];
+
+const result = applyUamTransactionApp({ project, operations });
+if (!result.ok) {
+	console.error(result.error.code, result.error.stage, result.error.message);
+}
+```
+
+> `restore` is a limited recovery tool, not a normal authoring or publishing workflow. Use it only with trusted local publish directories; the output must be a new project directory, and recovery replaces the target only after a complete staged write. It does not establish that third-party artifacts are safe and cannot reproduce the original source project. See the [published recovery boundaries](./docs/published-project-restore-limitations.md).
+
+If you need a **stateful backend runtime** with sessions, revisions, coordinated saves,
+and advisory locking, use the browser-safe `@openfairygui/backend` root entrypoint or
+the Node filesystem bridge exposed by `@openfairygui/backend/node`. This layer is
+transport-neutral backend foundation, not `packages/mcp`, and it does not redefine the transaction semantics owned by
+`@magicskysword/openfairygui-core`. The backend is stratified into `read / authoring / artifact / runtime`
+planes and exposes a unified metadata / diagnostics / version surface for backend responses,
+including `requestId / sessionId / revision / durationMs / warnings / diagnostics / stage`.
+The runtime plane also provides polling events, `cache.refresh` in-memory jobs,
+cooperative cancel, and revision-bound derived read-only cache snapshots. Browser editors can
+inject OPFS, IndexedDB, or ZIP-backed virtual filesystems through
+`createBackendStorageFileSystem` for `openProjectSession`, clean-session `materializeSession`,
+and dirty-session `saveSession` writeback. `publish / restore`
+do not execute inside browser-safe authoring sessions; the capability manifest declares their
+Node bridge boundary.
+
+```ts
+import { BackendRuntime, createBackendStorageFileSystem } from '@openfairygui/backend';
+
+const fileSystem = createBackendStorageFileSystem(browserStorage);
+const runtime = new BackendRuntime();
+const opened = runtime.openProjectSession({
+	project: uamProject,
+	storage: { fileSystem, fairyPath: 'Project.fairy' },
 });
+if (!opened.ok) throw new Error(opened.error.message);
+
+const bootstrapped = await runtime.materializeSession({
+	sessionId: opened.data.sessionId,
+	expectedRevision: opened.data.revision,
+	mode: 'fullProject',
+	reason: 'workspace_bootstrap',
+});
+if (!bootstrapped.ok) throw new Error(bootstrapped.error.message);
+```
+
+```ts
+import { createNodeBackendRuntime } from '@openfairygui/backend/node';
+
+const runtime = createNodeBackendRuntime();
+const opened = await runtime.openSession({ projectPath: './MyProject' });
+if (!opened.ok) throw new Error(opened.error.message);
+
+const capabilities = runtime.getCapabilities();
+console.log(capabilities.data.runtimeOwner);
+console.log(capabilities.data.manifest.browserSafe);
+
+const refresh = runtime.refreshCache({ sessionId: opened.data.sessionId });
+if (refresh.ok) {
+	const events = runtime.getEvents({ sessionId: opened.data.sessionId });
+	console.log(refresh.data.status, events.ok ? events.data.currentSequence : 0);
+}
+
+await runtime.closeSession({ sessionId: opened.data.sessionId });
+```
+
+If you want to expose the current backend runtime to MCP clients, use `@openfairygui/mcp`.
+This package is only a transport adapter; it does not redefine backend or UAM semantics.
+In addition to the 14 backend P2 tools, it exposes identity snapshot resources,
+workflow guidance prompts, and a shared `structuredContent.backendResult` output schema.
+MCP roots are documented as client context only, not as the path-safety boundary.
+
+```ts
+import { createOpenFairyGuiMcpServer } from '@openfairygui/mcp';
+
+const server = createOpenFairyGuiMcpServer();
+```
+
+stdio clients can use the package binary:
+
+```bash
+ofgui-mcp
 ```
 
 ## Command-line API
@@ -121,12 +206,14 @@ ofgui publish ./MyProject --output ./release
 # Override project type from the command line
 ofgui publish ./MyProject --output ./release --project-type unity
 
-# Restore a project from published output
+# Use only for trusted local artifact recovery
 ofgui restore ./release --output ./restored-project
 
 # Override restored project type
 ofgui restore ./release --output ./restored-project --project-type cocoscreator
 ```
+
+Even with `--force`, `restore` replaces an existing output directory only after the recovery completes.
 
 `--project-type` accepts either a name or a numeric id, for example:
 
@@ -161,11 +248,14 @@ pnpm dev:cli --help
 
 Implementation reference documents are currently maintained in Chinese. Start from [docs/README.md](./docs/README.md).
 
+The static documentation site renders the `docs/` content directly. Use `pnpm docs:dev` for a local preview and `pnpm docs:build` to generate the API Reference and site output.
+
 | Document | Description |
 |---|---|
 | [Architecture Overview](./docs/architecture-overview.md) | Package responsibilities, module boundaries, and core data flow |
 | [Editor Publish Settings](./docs/editor-publish-settings.md) | Publish setting sources, defaults, naming rules, and consumption points |
-| [Published Restore Limitations](./docs/published-project-restore-limitations.md) | Restore capability boundaries when only publish output is available |
+| [Publish Plugins](./docs/publish-plugins.md) | Publish plugin directory, lifecycle, fallback behavior, and relationship with FairyGUI editor plugins |
+| [Published Recovery Boundaries](./docs/published-project-restore-limitations.md) | Limited trusted-local recovery scope and non-recoverable content |
 | [Project XML Attribute Protocol](./docs/project-xml-attribute-reference.md) | XML attributes supported for `package.xml`, `component.xml`, and structural nodes |
 | [Project XML DisplayList Tag Alignment](./docs/project-xml-displaylist-variants.md) | Alignment of raw `displayList` tags and editor display item types |
 | [Binary Package Format](./docs/fairygui-binary-package-format.md) | Current `.fui` / `_fui.bytes` protocol reference |

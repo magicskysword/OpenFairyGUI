@@ -76,6 +76,12 @@
 | `duplicatePadding` |  | 是否复制边缘像素 |
 | `smoothing` |  | 是否允许平滑 |
 
+### `resources > movieclip`
+
+| 属性名 | Alias | 说明 |
+|---|---|---|
+| `atlas` |  | 动画资源纹理集模式 |
+
 ### `resources > font`
 
 | 属性名 | Alias | 说明 |
@@ -285,6 +291,7 @@ runtime 时，图片元素保持原始宽高，填充值只控制可见区域。
 | `anchor` |  | pivot 是否作为坐标锚点 |
 | `scale` |  | 缩放 |
 | `group` |  | 所属 group |
+| `visible` |  | 是否可见 |
 | `grayed` |  | 是否置灰 |
 | `url` |  | 加载地址 |
 | `align` |  | 水平对齐 |
@@ -310,6 +317,7 @@ runtime 时，图片元素保持原始宽高，填充值只控制可见区域。
 |---|---|---|
 | `xy` |  | 位置 |
 | `size` |  | 尺寸 |
+| `visible` |  | 是否可见 |
 | `url` |  | 加载地址 |
 | `align` |  | 水平对齐 |
 | `vAlign` |  | 垂直对齐 |
@@ -334,6 +342,11 @@ runtime 时，图片元素保持原始宽高，填充值只控制可见区域。
 | `anchor` |  | pivot 是否作为坐标锚点 |
 | `customData` |  | 自定义数据 |
 | `group` |  | 所属 group |
+| `rotation` |  | 旋转 |
+| `alpha` |  | 透明度 |
+| `visible` |  | 是否可见 |
+| `touchable` |  | 是否可触摸 |
+| `grayed` |  | 是否置灰 |
 | `font` |  | 字体 |
 | `fontSize` |  | 字号 |
 | `color` |  | 颜色 |
@@ -372,6 +385,40 @@ runtime 时，图片元素保持原始宽高，填充值只控制可见区域。
 
 | 属性名 | Alias | 说明 |
 |---|---|---|
+| `xy` |  | 位置 |
+| `size` |  | 尺寸 |
+| `restrictSize` |  | 尺寸限制 |
+| `group` |  | 所属 group |
+| `rotation` |  | 旋转 |
+| `alpha` |  | 透明度 |
+| `visible` |  | 是否可见 |
+| `touchable` |  | 是否可触摸 |
+| `grayed` |  | 是否置灰 |
+| `font` |  | 字体 |
+| `fontSize` |  | 字号 |
+| `color` |  | 颜色 |
+| `align` |  | 水平对齐 |
+| `vAlign` |  | 垂直对齐 |
+| `autoSize` |  | 自动尺寸 |
+| `singleLine` |  | 单行模式 |
+| `text` |  | 文本内容 |
+| `input` |  | 是否输入文本 |
+| `ubb` |  | 是否启用 UBB |
+| `leading` |  | 行间距 |
+| `letterSpacing` |  | 字间距 |
+| `underline` |  | 下划线 |
+| `italic` |  | 斜体 |
+| `bold` |  | 粗体 |
+| `strikethrough` |  | 删除线 |
+| `strokeColor` |  | 描边颜色 |
+| `strokeSize` |  | 描边宽度 |
+| `shadowColor` |  | 阴影颜色 |
+| `shadowOffset` |  | 阴影偏移 |
+| `autoClearText` |  | 自动清空文本 |
+| `demoText` |  | 示例文本 |
+| `faceDilate` |  | 字面扩张 |
+| `underlaySoftness` |  | 下层柔化 |
+| `vars` |  | 模板变量开关 |
 | `prompt` | `promptText` | 输入提示 |
 | `maxLength` |  | 最大长度 |
 | `restrict` |  | 输入限制 |
@@ -385,6 +432,34 @@ runtime 时，图片元素保持原始宽高，填充值只控制可见区域。
 
 | 属性名 | Alias | 说明 |
 |---|---|---|
+| `xy` |  | 位置 |
+| `size` |  | 尺寸 |
+| `group` |  | 所属 group |
+| `rotation` |  | 旋转 |
+| `alpha` |  | 透明度 |
+| `visible` |  | 是否可见 |
+| `touchable` |  | 是否可触摸 |
+| `grayed` |  | 是否置灰 |
+| `font` |  | 字体 |
+| `fontSize` |  | 字号 |
+| `color` |  | 颜色 |
+| `align` |  | 水平对齐 |
+| `vAlign` |  | 垂直对齐 |
+| `autoSize` |  | 自动尺寸 |
+| `singleLine` |  | 单行模式 |
+| `text` |  | 文本内容 |
+| `ubb` |  | 是否启用 UBB |
+| `leading` |  | 行间距 |
+| `letterSpacing` |  | 字间距 |
+| `underline` |  | 下划线 |
+| `italic` |  | 斜体 |
+| `bold` |  | 粗体 |
+| `strikethrough` |  | 删除线 |
+| `strokeColor` |  | 描边颜色 |
+| `strokeSize` |  | 描边宽度 |
+| `shadowColor` |  | 阴影颜色 |
+| `shadowOffset` |  | 阴影偏移 |
+| `autoClearText` |  | 自动清空文本 |
 | `restrictSize` |  | 尺寸限制 |
 | `underlaySoftness` |  | 下层柔化 |
 
@@ -443,6 +518,7 @@ runtime 时，图片元素保持原始宽高，填充值只控制可见区域。
 | `pivot` |  | pivot |
 | `anchor` |  | pivot 是否作为坐标锚点 |
 | `group` |  | 所属 group |
+| `visible` |  | 是否可见 |
 | `touchable` |  | 是否可触摸 |
 
 计数字段必须先按 `layout` 解释：
@@ -466,7 +542,7 @@ runtime 时，图片元素保持原始宽高，填充值只控制可见区域。
 |---|---|---|
 | `mode` |  | 按钮模式 |
 | `sound` |  | 点击音效 |
-| `soundVolumeScale` |  | 音量缩放 |
+| `soundVolumeScale` | `volume` | 音量缩放 |
 | `downEffect` |  | 按下效果 |
 | `downEffectValue` |  | 按下效果值 |
 | `title` |  | 标题 |

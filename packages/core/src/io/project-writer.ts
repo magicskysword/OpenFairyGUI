@@ -449,10 +449,17 @@ type WritableFontResource = WritableResource & {
 
 type WritableMovieClipResource = WritableResource & {
 	getFileName?(): string;
+	getTextureSetMode?(): string;
 };
 
 type WritableFileResource = WritableResource & {
 	getFile?(): string;
+};
+
+type WritableSourceDataResource = WritableResource & {
+	getSourceData?(): {
+		getData(): Uint8Array | null;
+	} | null;
 };
 
 type WritableSkeletonResource = WritableFileResource & {
@@ -643,6 +650,8 @@ type WritableChild = GObject & {
 	getInstanceController?(): string;
 	getInstancePage?(): string;
 	getInstanceChecked?(): boolean;
+	getInstanceSound?(): string;
+	getInstanceSoundVolumeScale?(): number;
 	getInstancePromptText?(): string;
 	getInstanceSelectionController?(): string;
 	getInstanceVisibleItemCount?(): number;
@@ -801,6 +810,23 @@ function assertDisplayListVariantAllowed(propertyType: string, tagName: string, 
  *
  * @category I/O
  */
+export interface ProjectWriteOptions {
+	/**
+	 * Previous package-controlled files to remove only after every new project file
+	 * has been written successfully. Paths are package-relative by construction;
+	 * arbitrary filesystem paths are deliberately not accepted.
+	 */
+	staleSourceFiles?: readonly ProjectSourceFile[];
+}
+
+/** Identifies one package-controlled file without exposing a filesystem path. */
+export interface ProjectSourceFile {
+	packageName: string;
+	branch: string;
+	path: string;
+	fileName: string;
+}
+
 export class ProjectWriter {
 	private readonly _fs: FileSystem;
 
@@ -808,10 +834,15 @@ export class ProjectWriter {
 		this._fs = fs;
 	}
 
-	async write(doc: Document, projectPath: string): Promise<void> {
+	async write(doc: Document, projectPath: string, options: ProjectWriteOptions = {}): Promise<void> {
 		const fs = this._fs;
 		const root = doc.getRoot();
 		const basePath = fs.dirname(projectPath);
+		const currentSourceFilePaths = new Set<string>();
+		const staleSourceFilePaths = new Set(
+			(options.staleSourceFiles ?? []).map((source) => this._projectSourceFilePath(basePath, source)),
+		);
+		for (const pkg of root.listPackages()) this._assertPackageOutputTargets(pkg);
 
 		// 1. Write .fairy file
 		const generatedFairyXml = `<?xml version="1.0" encoding="utf-8"?>\n`
@@ -844,12 +875,20 @@ export class ProjectWriter {
 		const assetsPath = fs.join(basePath, 'assets');
 		await fs.mkdir(assetsPath);
 		for (const pkg of root.listPackages()) {
-			await this._writePackage(doc, pkg, assetsPath);
+			await this._writePackage(doc, pkg, assetsPath, currentSourceFilePaths);
 		}
+
+		await this._removeStaleSourceFiles(currentSourceFilePaths, staleSourceFilePaths);
 	}
 
-	private async _writePackage(_doc: Document, pkg: Package, assetsPath: string): Promise<void> {
+	private async _writePackage(
+		_doc: Document,
+		pkg: Package,
+		assetsPath: string,
+		currentSourceFilePaths: Set<string>,
+	): Promise<void> {
 		const fs = this._fs;
+		this._assertSafePathSegment(pkg.getName(), 'package name');
 		const pkgDir = fs.join(assetsPath, pkg.getName());
 		await fs.mkdir(pkgDir);
 		const basePath = fs.dirname(assetsPath);
@@ -925,27 +964,142 @@ export class ProjectWriter {
 		const packageXml = typeof sourceXmlByBranch?.[''] === 'string'
 			? preserveOpaqueProjectXml('package', sourceXmlByBranch[''], generatedPackageXml)
 			: generatedPackageXml;
-		await fs.writeFile(fs.join(pkgDir, 'package.xml'), packageXml);
+		const packageDescriptorPath = fs.join(pkgDir, 'package.xml');
+		await fs.writeFile(packageDescriptorPath, packageXml);
+		currentSourceFilePaths.add(packageDescriptorPath);
 
 		// Write main-branch component XML files
 		for (const comp of mainResources.filter((resource): resource is Component => resource.propertyType === 'Component')) {
+			currentSourceFilePaths.add(fs.join(pkgDir, this._componentSourceRelativePath(comp)));
 			await this._writeComponent(comp, pkgDir);
 		}
+		await this._writeResourceSourceFiles(mainResources, pkgDir, currentSourceFilePaths);
 
 		for (const [branchName, branchResources] of resourcesByBranch) {
 			if (!branchName) continue;
+			this._assertSafePathSegment(branchName, 'branch name');
 			const branchPkgDir = fs.join(basePath, `assets_${branchName}`, pkg.getName());
 			await fs.mkdir(branchPkgDir);
 			const generatedBranchXml = this._renderBranchDescriptionXml(branchResources);
 			const branchXml = typeof sourceXmlByBranch?.[branchName] === 'string'
 				? preserveOpaqueProjectXml('branch', sourceXmlByBranch[branchName], generatedBranchXml)
 				: generatedBranchXml;
-			await fs.writeFile(fs.join(branchPkgDir, 'package_branch.xml'), branchXml);
+			const branchDescriptorPath = fs.join(branchPkgDir, 'package_branch.xml');
+			await fs.writeFile(branchDescriptorPath, branchXml);
+			currentSourceFilePaths.add(branchDescriptorPath);
 
 			for (const comp of branchResources.filter((resource): resource is Component => resource.propertyType === 'Component')) {
+				currentSourceFilePaths.add(fs.join(branchPkgDir, this._componentSourceRelativePath(comp)));
 				await this._writeComponent(comp, branchPkgDir);
 			}
+			await this._writeResourceSourceFiles(branchResources, branchPkgDir, currentSourceFilePaths);
 		}
+	}
+
+	private async _writeResourceSourceFiles(
+		resources: PackageResource[],
+		packageDir: string,
+		currentSourceFilePaths: Set<string>,
+	): Promise<void> {
+		const fs = this._fs;
+		for (const resource of resources) {
+			if (resource.propertyType === 'Component') continue;
+			const fileName = this._resourceFileName(resource as WritableResource);
+			if (!fileName) continue;
+			const relativePath = this._resourceSourceRelativePath(resource as WritableResource, fileName);
+			const targetPath = fs.join(packageDir, relativePath);
+			currentSourceFilePaths.add(targetPath);
+
+			const sourceData = (resource as WritableSourceDataResource).getSourceData?.();
+			if (!sourceData) continue;
+			const data = sourceData.getData();
+			if (!data) continue;
+			await fs.mkdir(fs.dirname(targetPath));
+			await fs.writeFileRaw(targetPath, new Uint8Array(data));
+		}
+	}
+
+	private async _removeStaleSourceFiles(
+		currentSourceFilePaths: Set<string>,
+		staleSourceFilePaths: Set<string>,
+	): Promise<void> {
+		const fs = this._fs;
+		const candidates = [...staleSourceFilePaths].filter((filePath) => !currentSourceFilePaths.has(filePath));
+		if (candidates.length === 0) return;
+		if (!fs.unlink) {
+			throw new Error('Project source cleanup requires a FileSystem.unlink() implementation.');
+		}
+		for (const filePath of candidates) {
+			if (!(await fs.exists(filePath))) continue;
+			await fs.unlink(filePath);
+		}
+	}
+
+	private _assertPackageOutputTargets(pkg: Package): void {
+		this._assertSafePathSegment(pkg.getName(), 'package name');
+		const resourcesByBranch = new Map<string, PackageResource[]>();
+		for (const resource of pkg.listResources()) {
+			const branchName = (resource as WritableResource).getBranch?.() ?? '';
+			const bucket = resourcesByBranch.get(branchName) ?? [];
+			bucket.push(resource);
+			resourcesByBranch.set(branchName, bucket);
+		}
+
+		for (const [branchName, resources] of resourcesByBranch) {
+			if (branchName) this._assertSafePathSegment(branchName, 'branch name');
+			const descriptorName = branchName ? 'package_branch.xml' : 'package.xml';
+			const targets = new Map<string, string>([[descriptorName, 'package descriptor']]);
+			for (const resource of resources) {
+				const target = resource.propertyType === 'Component'
+					? this._componentSourceRelativePath(resource as Component)
+					: this._resourceSourceRelativePath(resource as WritableResource, this._resourceFileName(resource as WritableResource));
+				if (!target) continue;
+				const previous = targets.get(target);
+				if (previous) {
+					throw new Error(`Package "${pkg.getName()}" output "${target}" conflicts with ${previous}.`);
+				}
+				targets.set(target, `resource "${(resource as WritableResource).getId?.() ?? resource.getName()}"`);
+			}
+		}
+	}
+
+	private _projectSourceFilePath(basePath: string, source: ProjectSourceFile): string {
+		this._assertSafePathSegment(source.packageName, 'stale source package name');
+		if (source.branch) this._assertSafePathSegment(source.branch, 'stale source branch name');
+		this._assertSafePathSegment(source.fileName, 'stale source file name');
+		const relativePath = this._normalizeSourceRelativePath([source.path, source.fileName].filter(Boolean).join('/'));
+		const assetRoot = source.branch ? `assets_${source.branch}` : 'assets';
+		return this._fs.join(basePath, assetRoot, source.packageName, relativePath);
+	}
+
+	private _resourceSourceRelativePath(resource: WritableResource, fileName: string): string {
+		if (!fileName) return '';
+		this._assertSafePathSegment(fileName, 'resource file name');
+		const resourcePath = resource.getPath?.() ?? '/';
+		const normalizedPath = resourcePath.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+		return this._normalizeSourceRelativePath([normalizedPath, fileName].filter(Boolean).join('/'));
+	}
+
+	private _componentSourceRelativePath(component: Component): string {
+		const typedComponent = component as WritableComponent;
+		const name = component.getName();
+		this._assertSafePathSegment(name, 'component name');
+		const componentPath = typedComponent.getPath?.() ?? '/';
+		return this._normalizeSourceRelativePath([componentPath, `${name}.xml`].filter(Boolean).join('/'));
+	}
+
+	private _assertSafePathSegment(value: string, label: string): void {
+		if (!value || value === '.' || value === '..' || /[\\/:]/.test(value)) {
+			throw new Error(`Invalid ${label} "${value}".`);
+		}
+	}
+
+	private _normalizeSourceRelativePath(value: string): string {
+		const segments = value.replace(/\\/g, '/').split('/').filter(Boolean);
+		if (segments.some((segment) => segment === '.' || segment === '..' || segment.includes(':'))) {
+			throw new Error(`Invalid project source path "${value}".`);
+		}
+		return segments.join('/');
 	}
 
 	private _renderPackageDescriptionXml(
@@ -956,15 +1110,20 @@ export class ProjectWriter {
 		const publishNodeAttrs = Object.fromEntries(
 			Object.entries(publishAttrs).filter(([key]) => key !== 'atlas'),
 		);
+		const publishAtlases = Array.isArray(publishAttrs.atlas) ? publishAttrs.atlas as Record<string, unknown>[] : [];
 		const lines = [
 			'<?xml version="1.0" encoding="utf-8"?>',
 			`<packageDescription${renderXmlAttrs(packageDescriptionAttrs)}>`,
 			'  <resources>',
 			...this._renderPackageResourceLines(resources, '    '),
 			'  </resources>',
-			`  <publish${renderXmlAttrs(publishNodeAttrs)}>`,
 		];
-		const publishAtlases = Array.isArray(publishAttrs.atlas) ? publishAttrs.atlas as Record<string, unknown>[] : [];
+		if (publishAtlases.length === 0) {
+			lines.push(`  <publish${renderXmlAttrs(publishNodeAttrs)}/>`);
+			lines.push('</packageDescription>');
+			return `${lines.join('\n')}\n`;
+		}
+		lines.push(`  <publish${renderXmlAttrs(publishNodeAttrs)}>`);
 		for (const atlasAttrs of publishAtlases) {
 			lines.push(`    <atlas${renderXmlAttrs(atlasAttrs)}/>`);
 		}
@@ -1108,6 +1267,12 @@ export class ProjectWriter {
 				if (samplePointSize !== 0) writeXmlAttr(attrs, PROJECT_XML_PROTOCOL.packageFontResource.attrs.samplePointSize, String(samplePointSize));
 			}
 
+			if (res.propertyType === 'MovieClipResource') {
+				const movieClipRes = res as WritableMovieClipResource;
+				const textureSetMode = movieClipRes.getTextureSetMode?.() ?? '';
+				if (textureSetMode) writeXmlAttr(attrs, PROJECT_XML_PROTOCOL.packageMovieClipResource.attrs.atlas, textureSetMode);
+			}
+
 			if (res.propertyType === 'SpineResource' || res.propertyType === 'DragonBonesResource') {
 				const skeletonRes = res as WritableSkeletonResource;
 				writeXmlAttr(attrs, PROJECT_XML_PROTOCOL.packageSkeletonResource.attrs.width, String(skeletonRes.getWidth?.() ?? 0));
@@ -1131,13 +1296,8 @@ export class ProjectWriter {
 	private async _writeComponent(comp: Component, pkgDir: string): Promise<void> {
 		const fs = this._fs;
 		const typedComp = comp as WritableComponent;
-		const path = typedComp.getPath?.() ?? '/';
-		const name = comp.getName() + '.xml';
-
-		// Ensure subdirectory exists
-		const subDir = path.replace(/^\//, '').replace(/\/$/, '');
-		const fileDir = subDir ? fs.join(pkgDir, subDir) : pkgDir;
-		if (subDir) await fs.mkdir(fileDir);
+		const targetPath = fs.join(pkgDir, this._componentSourceRelativePath(comp));
+		await fs.mkdir(fs.dirname(targetPath));
 
 		const compAttrs: Record<string, unknown> = {};
 		const [w, h] = [typedComp.getWidth?.() ?? 0, typedComp.getHeight?.() ?? 0];
@@ -1301,7 +1461,7 @@ export class ProjectWriter {
 		const componentXml = typeof sourceComponentXml === 'string'
 			? preserveOpaqueProjectXml('component', sourceComponentXml, generatedComponentXml)
 			: generatedComponentXml;
-		await fs.writeFile(fs.join(fileDir, name), componentXml);
+		await fs.writeFile(targetPath, componentXml);
 	}
 
 	private _serializeController(ctrl: Controller): Record<string, unknown> {
@@ -1531,6 +1691,7 @@ export class ProjectWriter {
 			}
 			const [scaleX, scaleY] = [typedObj.getScaleX?.() ?? 1, typedObj.getScaleY?.() ?? 1];
 			if (scaleX !== 1 || scaleY !== 1) writeXmlAttr(attrs, PROJECT_XML_PROTOCOL.loader.attrs.scale, `${scaleX},${scaleY}`);
+			if (typedObj.getVisible?.() === false) writeXmlAttr(attrs, PROJECT_XML_PROTOCOL.loader.attrs.visible, 'false');
 			if (typedObj.getGrayed?.()) writeXmlAttr(attrs, PROJECT_XML_PROTOCOL.loader.attrs.grayed, 'true');
 			const url = typedObj.getUrl?.();
 			if (url) writeXmlAttr(attrs, PROJECT_XML_PROTOCOL.loader.attrs.url, url);
@@ -1593,6 +1754,11 @@ export class ProjectWriter {
 			if (typedObj.getFilterData?.()) writeXmlAttr(attrs, PROJECT_XML_PROTOCOL.movieClip.attrs.filterData, typedObj.getFilterData?.());
 		}
 		if (type === 'GTextField' || type === 'GRichTextField' || type === 'GTextInput') {
+			const textNodeProtocol = type === 'GRichTextField'
+				? PROJECT_XML_PROTOCOL.richText
+				: type === 'GTextInput'
+					? PROJECT_XML_PROTOCOL.textInput
+					: PROJECT_XML_PROTOCOL.text;
 			const [x, y] = [typedObj.getX?.() ?? 0, typedObj.getY?.() ?? 0];
 			writeXmlAttr(attrs, PROJECT_XML_PROTOCOL.text.attrs.xy, `${x},${y}`);
 			const [w, h] = [typedObj.getWidth?.() ?? 0, typedObj.getHeight?.() ?? 0];
@@ -1629,6 +1795,11 @@ export class ProjectWriter {
 				if (underlaySoftness !== 0) writeXmlAttr(attrs, PROJECT_XML_PROTOCOL.richText.attrs.underlaySoftness, String(underlaySoftness));
 			}
 			if (typedObj.getGroup?.()) writeXmlAttr(attrs, PROJECT_XML_PROTOCOL.text.attrs.group, typedObj.getGroup?.());
+			if ((typedObj.getRotation?.() ?? 0) !== 0) writeXmlAttr(attrs, textNodeProtocol.attrs.rotation, String(typedObj.getRotation?.() ?? 0));
+			if ((typedObj.getAlpha?.() ?? 1) !== 1) writeXmlAttr(attrs, textNodeProtocol.attrs.alpha, formatDisplayAlpha(typedObj.getAlpha?.() ?? 1));
+			if (typedObj.getVisible?.() === false) writeXmlAttr(attrs, textNodeProtocol.attrs.visible, 'false');
+			if (typedObj.getTouchable?.() === false) writeXmlAttr(attrs, textNodeProtocol.attrs.touchable, 'false');
+			if (typedObj.getGrayed?.()) writeXmlAttr(attrs, textNodeProtocol.attrs.grayed, 'true');
 			if (typedObj.getCustomData?.()) writeXmlAttr(attrs, PROJECT_XML_PROTOCOL.text.attrs.customData, typedObj.getCustomData?.());
 		}
 		if ((type === 'GList' || type === 'GTree') && typedObj.getGroup?.()) {
@@ -1644,12 +1815,14 @@ export class ProjectWriter {
 				writeXmlAttr(attrs, PROJECT_XML_PROTOCOL.list.attrs.pivot, `${pivotX},${pivotY}`);
 				if (typedObj.getPivotAsAnchor?.()) writeXmlAttr(attrs, PROJECT_XML_PROTOCOL.list.attrs.anchor, 'true');
 			}
+			if (typedObj.getVisible?.() === false) writeXmlAttr(attrs, PROJECT_XML_PROTOCOL.list.attrs.visible, 'false');
 		}
 		if (type === 'GLoader3D') {
 			const [x, y] = [typedObj.getX?.() ?? 0, typedObj.getY?.() ?? 0];
 			writeXmlAttr(attrs, PROJECT_XML_PROTOCOL.loader3D.attrs.xy, `${x},${y}`);
 			const [w, h] = [typedObj.getWidth?.() ?? 0, typedObj.getHeight?.() ?? 0];
 			if (w !== 0 || h !== 0) writeXmlAttr(attrs, PROJECT_XML_PROTOCOL.loader3D.attrs.size, `${w},${h}`);
+			if (typedObj.getVisible?.() === false) writeXmlAttr(attrs, PROJECT_XML_PROTOCOL.loader3D.attrs.visible, 'false');
 			const url = typedObj.getUrl?.();
 			if (url) writeXmlAttr(attrs, PROJECT_XML_PROTOCOL.loader3D.attrs.url, url);
 			const align = typedObj.getAlign?.();
@@ -1878,6 +2051,10 @@ export class ProjectWriter {
 				if (typedObj.getInstanceController?.() && extSpecs.controller) writeXmlAttr(extAttrs, extSpecs.controller, typedObj.getInstanceController?.());
 				if (typedObj.getInstancePage?.() && extSpecs.page) writeXmlAttr(extAttrs, extSpecs.page, typedObj.getInstancePage?.());
 				if (typedObj.getInstanceChecked?.() && extSpecs.checked) writeXmlAttr(extAttrs, extSpecs.checked, '1');
+				if (typedObj.getInstanceSound?.() && extSpecs.sound) writeXmlAttr(extAttrs, extSpecs.sound, typedObj.getInstanceSound?.());
+				if ((typedObj.getInstanceSoundVolumeScale?.() ?? 1) !== 1 && extSpecs.soundVolumeScale) {
+					writeXmlAttr(extAttrs, extSpecs.soundVolumeScale, String(typedObj.getInstanceSoundVolumeScale?.() ?? 1));
+				}
 				if (typedObj.getInstancePromptText?.() && extSpecs.prompt) writeXmlAttr(extAttrs, extSpecs.prompt, typedObj.getInstancePromptText?.());
 				if (typedObj.getInstanceSelectionController?.() && extSpecs.selectionController) writeXmlAttr(extAttrs, extSpecs.selectionController, typedObj.getInstanceSelectionController?.());
 				if ((typedObj.getInstanceVisibleItemCount?.() ?? 0) > 0 && extSpecs.visibleItemCount) writeXmlAttr(extAttrs, extSpecs.visibleItemCount, String(typedObj.getInstanceVisibleItemCount?.() ?? 0));

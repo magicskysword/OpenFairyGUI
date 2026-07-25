@@ -3,7 +3,8 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { getFixtureProjectPath } from '@openfairygui/test-utils';
-import { Document, GearType, NodeIO, PropertyType } from '../src/index.js';
+import { Document, GearType, PropertyType } from '../src/index.js';
+import { NodeIO } from '../src/node.js';
 
 const PROJECT_PATH = getFixtureProjectPath('FairyGUI-unity', 'UIProject/FairyGUI-Unity-Examples.fairy');
 
@@ -963,7 +964,7 @@ test('round-trip: loader useResize and text strikethrough attrs survive write→
 	}
 });
 
-test('writer: uses canonical XML attr names for component root, loader, richtext, loader3D, input text, group, and list nodes', async (t) => {
+test('writer: uses canonical XML attr names for component root, loader, text nodes, loader3D, group, and list nodes', async (t) => {
 	const doc = new Document();
 	doc.getRoot().setProjectId('proj-xml-protocol').setProjectType(0).setVersion('3.0');
 
@@ -1021,6 +1022,10 @@ test('writer: uses canonical XML attr names for component root, loader, richtext
 	input.setPassword(true);
 	input.setKeyboardType(2);
 	input.setAutoClearText(true);
+	input.setTouchable(false);
+	input.setGrayed(true);
+	input.setAlpha(0.65);
+	input.setRotation(15);
 
 	const richText = doc.createGRichTextField('summary');
 	richText.setId('n1_5');
@@ -1040,6 +1045,10 @@ test('writer: uses canonical XML attr names for component root, loader, richtext
 	richText.setStrokeSize(2);
 	richText.setShadowColor('#000000');
 	richText.setShadowOffset({ x: 1, y: 2 });
+	richText.setTouchable(false);
+	richText.setGrayed(true);
+	richText.setAlpha(0.55);
+	richText.setRotation(30);
 
 	const list = doc.createGList('tabs');
 	list.setId('n2');
@@ -1093,6 +1102,7 @@ test('writer: uses canonical XML attr names for component root, loader, richtext
 		t.true(componentXml.includes('strokeColor="#ffffff"'), 'richtext writes canonical strokeColor attr');
 		t.true(componentXml.includes('shadowColor="#000000"'), 'text shadowColor attrs are normalized to lowercase');
 		t.true(componentXml.includes('shadowOffset="1,2"'), 'richtext writes canonical shadowOffset attr');
+		t.true(/<richtext\b[^>]*rotation="30"[^>]*alpha="0.55"[^>]*touchable="false"[^>]*grayed(?:="true")?/.test(componentXml), 'richtext writes canonical common display attrs');
 		t.true(componentXml.includes('animation="idle"'), 'loader3D uses canonical animation attr');
 		t.false(componentXml.includes('animationName='), 'loader3D no longer writes model field name');
 		t.false(/<loader3d\b[^>]*\balign=/.test(componentXml), 'loader3D omits default align attr');
@@ -1100,6 +1110,7 @@ test('writer: uses canonical XML attr names for component root, loader, richtext
 		t.true(componentXml.includes('prompt="Search here"'), 'text input uses canonical prompt attr');
 		t.true(/<inputtext\b[^>]*text=""[^>]*color="#ff3300"/.test(componentXml), 'text input preserves explicit empty text and lowercases color attrs');
 		t.true(/<inputtext\b[^>]*autoClearText(?:="true")?/.test(componentXml), 'text input writes canonical autoClearText attr');
+		t.true(/<inputtext\b[^>]*rotation="15"[^>]*alpha="0.65"[^>]*touchable="false"[^>]*grayed(?:="true")?/.test(componentXml), 'text input writes canonical common display attrs');
 		t.false(componentXml.includes('promptText='), 'text input no longer writes model field name');
 		t.true(componentXml.includes('colGap="5"'), 'group uses canonical colGap attr');
 		t.true(/excludeInvisibles(?:="true")?/.test(componentXml), 'group writes excludeInvisibles attr');
@@ -1141,11 +1152,19 @@ test('writer: uses canonical XML attr names for component root, loader, richtext
 		t.is(byId.get('n1')?.getRestrict?.(), 'A-Z', 'text input restrict survives round-trip');
 		t.true(byId.get('n1')?.getPassword?.(), 'text input password survives round-trip');
 		t.is(byId.get('n1')?.getKeyboardType?.(), 2, 'text input keyboardType survives round-trip');
+		t.false(byId.get('n1')?.getTouchable?.(), 'text input touchable survives round-trip');
+		t.true(byId.get('n1')?.getGrayed?.(), 'text input grayed survives round-trip');
+		t.is(byId.get('n1')?.getAlpha?.(), 0.65, 'text input alpha survives round-trip');
+		t.is(byId.get('n1')?.getRotation?.(), 15, 'text input rotation survives round-trip');
 		t.is(byId.get('n1_5')?.getFont?.(), 'ui://pkgProtocol/font', 'richtext font survives round-trip');
 		t.true(byId.get('n1_5')?.getAutoClearText?.(), 'richtext autoClearText survives round-trip');
 		t.true(byId.get('n1_5')?.getUbbEnabled?.(), 'richtext ubb survives round-trip');
 		t.true(byId.get('n1_5')?.getSingleLine?.(), 'richtext singleLine survives round-trip');
 		t.is(byId.get('n1_5')?.getStrokeSize?.(), 2, 'richtext strokeSize survives round-trip');
+		t.false(byId.get('n1_5')?.getTouchable?.(), 'richtext touchable survives round-trip');
+		t.true(byId.get('n1_5')?.getGrayed?.(), 'richtext grayed survives round-trip');
+		t.is(byId.get('n1_5')?.getAlpha?.(), 0.55, 'richtext alpha survives round-trip');
+		t.is(byId.get('n1_5')?.getRotation?.(), 30, 'richtext rotation survives round-trip');
 		t.is(byId.get('n2')?.getColumnGap?.(), 8, 'list colGap survives round-trip');
 		t.is(byId.get('n2')?.getColumnCount?.(), 9999, 'flow list lineItemCount survives as columnCount');
 		t.false(byId.get('n2')?.getAutoResizeItem?.(), 'list autoItemSize survives round-trip');
@@ -2819,6 +2838,42 @@ test('round-trip: package image textureSetMode survives package.xml write→read
 		const image2 = pkg2!.listResources().find((res) => res.getId?.() === 'imgAtlas') as ReturnType<Document['createImageResource']>;
 		t.truthy(image2, 'image resource exists after round-trip');
 		t.is(image2.getTextureSetMode(), 'alone_npot', 'textureSetMode survives');
+	} finally {
+		await fs.rm(tmpDir, { recursive: true, force: true });
+	}
+});
+
+test('round-trip: package movieclip textureSetMode survives package.xml write→read', async (t) => {
+	const io = new NodeIO();
+	const doc = new Document();
+	doc.getRoot().setProjectId('proj-package-movieclip-atlas').setProjectType(0).setVersion('3.0');
+
+	const pkg = doc.createPackage('DemoMovieClipTextureSetMode');
+	pkg.setId('pkgMovieClipTextureSetMode');
+
+	const movieClip = doc.createMovieClipResource('pet');
+	movieClip.setId('mcAtlas');
+	movieClip.setPath('/fx/');
+	movieClip.setFileName('pet.jta');
+	movieClip.setTextureSetMode('alone_mof');
+	pkg.addResource(movieClip);
+
+	const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'openfairygui-package-movieclip-atlas-'));
+	const outFairy = path.join(tmpDir, 'out.fairy');
+
+	try {
+		await io.writeProject(doc, outFairy);
+
+		const pkgXml = await fs.readFile(path.join(tmpDir, 'assets', 'DemoMovieClipTextureSetMode', 'package.xml'), 'utf-8');
+		t.true(pkgXml.includes('atlas="alone_mof"'), 'package movieclip writes atlas attr');
+
+		const doc2 = await io.readProject(outFairy);
+		const pkg2 = doc2.getRoot().getPackage('DemoMovieClipTextureSetMode');
+		t.truthy(pkg2, 'DemoMovieClipTextureSetMode exists after round-trip');
+
+		const movieClip2 = pkg2!.listResources().find((res) => res.getId?.() === 'mcAtlas') as ReturnType<Document['createMovieClipResource']>;
+		t.truthy(movieClip2, 'movieclip resource exists after round-trip');
+		t.is(movieClip2.getTextureSetMode(), 'alone_mof', 'movieclip textureSetMode survives');
 	} finally {
 		await fs.rm(tmpDir, { recursive: true, force: true });
 	}

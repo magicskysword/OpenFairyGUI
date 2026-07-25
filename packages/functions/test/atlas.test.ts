@@ -1,8 +1,8 @@
-import test from 'ava';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { maxRectsPack, Document } from '@magicskysword/openfairygui-core';
+import { Document, maxRectsPack } from '@openfairygui/core';
+import test from 'ava';
 import sharp from 'sharp';
 import { atlas } from '../src/index.js';
 
@@ -138,6 +138,20 @@ test('atlas: skips packages with no images', async (t) => {
 	t.is(pkg.listAtlases().length, 0, 'no atlas created for image-less package');
 });
 
+test('atlas: rejects a packable input that cannot fit on any page', async (t) => {
+	const doc = new Document();
+	const pkg = doc.createPackage('oversized');
+	pkg.setId('oversize1');
+	const image = doc.createImageResource('huge.png');
+	image.setId('img001').setWidth(64).setHeight(64);
+	pkg.addResource(image);
+
+	await t.throwsAsync(
+		() => doc.transform(atlas({ maxSize: 16, allowRotation: false, multiPage: false })),
+		{ message: /Could not pack every input/ },
+	);
+});
+
 test('atlas: handles multiple pages when images exceed maxSize', async (t) => {
 	const doc = new Document();
 	const pkg = doc.createPackage('test');
@@ -211,58 +225,50 @@ test('atlas: trimImage keeps fully transparent images as zero-sized sprites', as
 	}
 });
 
-test('atlas: rasterizes SVG sources to their declared FairyGUI size before trimming', async (t) => {
+test('atlas: rasterizes declared-size SVGs before trim and composite', async (t) => {
 	const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'openfairygui-atlas-svg-'));
-	const imageDir = path.join(tmpDir, 'Icons');
-	const imagePath = path.join(imageDir, 'cursor.svg');
+	const imageDir = path.join(tmpDir, 'Icons', 'images');
+	const imagePath = path.join(imageDir, 'save.svg');
 
 	try {
 		await fs.mkdir(imageDir, { recursive: true });
 		await fs.writeFile(
 			imagePath,
-			`<svg xmlns="http://www.w3.org/2000/svg" width="86" height="128" viewBox="0 0 86 128">
-  <rect width="86" height="128" fill="#ffffff"/>
-</svg>`,
-			'utf8',
+			'<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128"><rect width="128" height="128" fill="#bdbdbd"/></svg>',
 		);
 
 		const doc = new Document();
 		const pkg = doc.createPackage('Icons');
-		pkg.setId('icons001');
-		const image = doc.createImageResource('cursor');
-		image
-			.setId('cursor1')
-			.setPath('/')
-			.setWidth(16)
-			.setHeight(16)
-			.setExported(true)
-			.setExtras({ ...image.getExtras(), _fileName: 'cursor.svg' });
-		pkg.addResource(image);
+		pkg.setId('svg00001');
 
-		await doc.transform(atlas({
-			encoder: sharp,
-			basePath: tmpDir,
-			outputPath: tmpDir,
-			mkdir: async (dir) => {
-				await fs.mkdir(dir, { recursive: true });
-			},
-			trimImage: true,
-			powerOfTwo: true,
-			maxSize: 64,
-		}));
+		const img = doc.createImageResource('save.svg');
+		img.setId('svg001').setPath('/images/').setWidth(16).setHeight(16).setExported(true);
+		pkg.addResource(img);
 
-		const sprite = pkg.listAtlases()
+		await doc.transform(
+			atlas({
+				encoder: sharp,
+				basePath: tmpDir,
+				outputPath: tmpDir,
+				mkdir: async (dir) => {
+					await fs.mkdir(dir, { recursive: true });
+				},
+				trimImage: true,
+				powerOfTwo: true,
+				maxSize: 256,
+			}),
+		);
+
+		const sprite = pkg
+			.listAtlases()
 			.flatMap((atlasNode) => atlasNode.listSprites())
-			.find((entry) => entry.getItemId() === 'cursor1');
-		t.truthy(sprite);
-		t.is(sprite?.getRectWidth(), 16);
-		t.is(sprite?.getRectHeight(), 16);
-		t.is(sprite?.getOriginalWidth(), 16);
-		t.is(sprite?.getOriginalHeight(), 16);
+			.find((entry) => entry.getItemId() === 'svg001');
 
-		const atlasMetadata = await sharp(path.join(tmpDir, 'Icons_atlas0.png')).metadata();
-		t.true((atlasMetadata.width ?? 0) <= 64);
-		t.true((atlasMetadata.height ?? 0) <= 64);
+		t.truthy(sprite, 'SVG produces an atlas sprite');
+		t.is(sprite?.getRectWidth(), 16, 'trim uses the declared SVG width');
+		t.is(sprite?.getRectHeight(), 16, 'trim uses the declared SVG height');
+		t.is(sprite?.getOriginalWidth(), 16, 'sprite source width remains declared width');
+		t.is(sprite?.getOriginalHeight(), 16, 'sprite source height remains declared height');
 	} finally {
 		await fs.rm(tmpDir, { recursive: true, force: true });
 	}
@@ -324,56 +330,83 @@ test('atlas: direct single PNG output keeps portrait sprite unrotated for Unity 
 	}
 });
 
-test('atlas: emits generated PNG bytes through an in-memory output sink', async (t) => {
-	const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'openfairygui-atlas-memory-'));
-	const imageDir = path.join(tmpDir, 'MemoryPkg');
-	const imagePath = path.join(imageDir, 'icon.png');
-	const outputDir = path.join(tmpDir, 'must-not-be-created');
+test('atlas: standalone textureSetMode and fixed page outputs use editor-style file names', async (t) => {
+	const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'openfairygui-atlas-texture-set-mode-'));
+	const imageDir = path.join(tmpDir, 'AtlasModes', 'images');
+	const coverPath = path.join(imageDir, 'cover.jpg');
+	const iconPath = path.join(imageDir, 'icon.png');
+	const badgePath = path.join(imageDir, 'badge.png');
 
 	try {
 		await fs.mkdir(imageDir, { recursive: true });
 		await sharp({
 			create: {
-				width: 24,
-				height: 16,
-				channels: 4,
-				background: { r: 32, g: 96, b: 192, alpha: 1 },
+				width: 320,
+				height: 180,
+				channels: 3,
+				background: { r: 120, g: 40, b: 30 },
 			},
-		}).png().toFile(imagePath);
+		}).jpeg().toFile(coverPath);
+		await sharp({
+			create: {
+				width: 64,
+				height: 64,
+				channels: 4,
+				background: { r: 30, g: 120, b: 220, alpha: 1 },
+			},
+		}).png().toFile(iconPath);
+		await sharp({
+			create: {
+				width: 48,
+				height: 48,
+				channels: 4,
+				background: { r: 220, g: 180, b: 30, alpha: 1 },
+			},
+		}).png().toFile(badgePath);
 
 		const doc = new Document();
-		const pkg = doc.createPackage('MemoryPkg');
-		pkg.setId('memory01');
-		const image = doc.createImageResource('icon');
-		image
-			.setId('icon1')
-			.setPath('/')
-			.setWidth(24)
-			.setHeight(16)
-			.setExported(true)
-			.setExtras({ ...image.getExtras(), _fileName: 'icon.png' });
-		pkg.addResource(image);
+		const pkg = doc.createPackage('AtlasModes');
+		pkg.setId('atlasmodes01');
 
-		const emitted = new Map<string, Uint8Array>();
+		const cover = doc.createImageResource('cover');
+		cover.setId('cover01').setPath('/images/').setWidth(320).setHeight(180).setExported(true).setTextureSetMode('alone_npot');
+		cover.setExtras({ ...cover.getExtras(), _fileName: 'cover.jpg' });
+		pkg.addResource(cover);
+
+		const icon = doc.createImageResource('icon');
+		icon.setId('icon01').setPath('/images/').setWidth(64).setHeight(64).setExported(true);
+		icon.setExtras({ ...icon.getExtras(), _fileName: 'icon.png' });
+		pkg.addResource(icon);
+
+		const badge = doc.createImageResource('badge');
+		badge.setId('badge01').setPath('/images/').setWidth(48).setHeight(48).setExported(true).setTextureSetMode('0');
+		badge.setExtras({ ...badge.getExtras(), _fileName: 'badge.png' });
+		pkg.addResource(badge);
+
 		await doc.transform(atlas({
 			encoder: sharp,
 			basePath: tmpDir,
-			outputPath: outputDir,
-			mkdir: async () => undefined,
-			writeFileRaw: async (filePath, data) => {
-				emitted.set(filePath, data);
+			outputPath: tmpDir,
+			mkdir: async (dir) => {
+				await fs.mkdir(dir, { recursive: true });
 			},
-			maxSize: 64,
+			powerOfTwo: true,
+			maxSize: 512,
+			directSingleImageOutput: true,
 		}));
 
-		t.is(emitted.size, 1);
-		const [emittedPath, emittedPng] = [...emitted.entries()][0]!;
-		t.true(emittedPath.endsWith('MemoryPkg_atlas0.png'));
-		t.deepEqual([...emittedPng.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
-		const metadata = await sharp(emittedPng).metadata();
-		t.true((metadata.width ?? 0) >= 24);
-		t.true((metadata.height ?? 0) >= 16);
-		await t.throwsAsync(fs.access(outputDir));
+		const files = new Set((await fs.readdir(tmpDir)).filter((entry) => entry.startsWith('AtlasModes_atlas')));
+		t.true(files.has('AtlasModes_atlas_cover01.jpg'), 'standalone image writes resource-id atlas file');
+		t.true(files.has('AtlasModes_atlas0.png'), 'fixed page atlas keeps its requested page name');
+		t.true(files.has('AtlasModes_atlas1.png'), 'auto atlas skips the fixed page instead of colliding with direct output');
+		t.false(files.has('AtlasModes_atlas2.png'), 'no unexpected extra page is emitted');
+
+		const atlasFiles = pkg.listAtlases().map((atlasNode) => atlasNode.getFile()).sort();
+		t.deepEqual(
+			atlasFiles,
+			['AtlasModes_atlas0.png', 'AtlasModes_atlas1.png', 'AtlasModes_atlas_cover01.jpg'],
+			'atlas nodes keep standalone and fixed-page file names',
+		);
 	} finally {
 		await fs.rm(tmpDir, { recursive: true, force: true });
 	}

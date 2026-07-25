@@ -76,6 +76,10 @@
 - 编辑器 `GlobalPublishSettings` 里还存在 `atlasMaxSize`、`atlasPaging`、`atlasSizeOption`、`atlasForceSquare`、`atlasAllowRotation`、`atlasTrimImage` 这些运行时字段，它们对应 `Publish.json` 里的 `atlasSetting` 子对象。
 - `extractAlpha` 不属于全局 `Publish.json` 的真实属性；它在包级图集设置里出现。
 
+### SVG 图像发布
+
+当 `package.xml` 的 `image` 资源指向 `.svg`，并声明了正的 `width` 和 `height` 时，发布会先按这两个声明尺寸栅格化，再执行可选裁边和图集合成。发布物只包含 PNG 图集；sprite 的原始尺寸保持为工程声明值。
+
 ## 包级发布设置真实属性
 
 `PublishSettings` 代表单个包的发布设置，真实属性如下：
@@ -98,24 +102,46 @@
 - 工程 `package.xml` 中的 `publish` 节点当前正式支持 `name`、`path`、`branchPath`、`packageCount`、`genCode`、`codePath`，以及包级图集子节点 `<atlas name="Default" index="0"/>`。
 - 工程 `package.xml` 的 `packageDescription` 根节点当前正式支持 `compressPNG` 与 `jpegQuality`，用于承载包级图片压缩选项；未设置时保持省略，不强制写默认值。
 
-## `publish()` 当前执行模式
+## 当前发布输出路径解析
 
-`@magicskysword/openfairygui-functions` 的 `publish()` 提供两个执行模式：
+发布时显式传入的输出目录优先于设置文件。未传入时，当前选择顺序如下：
+
+1. 活跃分支发布的包级 `branchPath`，再到全局 `branchPath`。
+2. 包级 `path`。
+3. 全局 `path`。
+
+选中的相对路径以工程根目录为基准；若以上都未配置，发布不会隐式选择输出目录。
+
+## 当前发布完整性要求
+
+这些要求是 OpenFairyGUI 当前发布执行时的能力边界，不是新增的编辑器设置字段：
+
+| 条件 | 当前行为 |
+|---|---|
+| 已解析到发布输出目录 | 必须提供输出文件系统；缺失时不会把流程当作发布成功 |
+| 有需要封包的图像或动画帧 | 必须提供 raster encoder、源资源路径和 atlas 输出目录 |
+| 图集装箱、图像读取或合成失败 | 中止发布，不生成带透明空洞或缺页的成功结果 |
+| `SoundResource`、`MiscResource`、`SpineResource`、`DragonBonesResource` 及其依赖复制失败 | 中止发布，不把缺失的 runtime 资源降级为 warning |
+
+未请求任何输出目录时，低层 `publish()` 可以只计算 layout；这不是文件发布，也不会写出二进制或资源文件。标准 Node 工作流应使用 `publishNode()`。
+
+## `publish()` 执行模式
+
+`@magicskysword/openfairygui-functions` 的低层 `publish()` 提供两个执行模式：
 
 | `mode` | 行为 |
 |---|---|
-| `full` 或省略 | 执行图集打包，再输出包描述、声音、外部资源和配置要求的代码 |
+| `full` 或省略 | 执行图集打包，再输出包定义、声音、外部资源和配置要求的代码 |
 | `definitions` | 跳过图集打包，其余发布流程不变 |
 
-`definitions` 不要求输出目录中已有图集，也不判断最终产物能否独立运行；它只表达
-“本次不重新打图集”。发布到已有目录时，同名文件由调用方文件系统实现覆盖，
-`publish()` 不清空目录或主动删除其他运行时旧文件。
+`definitions` 只表示“本次不重新打图集”。它不检查已有图集是否存在，也不判断最终目录能否独立运行。
+发布到已有目录时，同名文件由调用方文件系统实现覆盖；`publish()` 不会清空目录或主动删除其他旧文件。
 
-`packages` 按包名筛选发布范围。筛选同时作用于包描述、图集、声音、外部资源和
-代码生成；未选包不会因为 atlas transform 遍历工程而产生图集文件。
+`packages` 按包名筛选整个发布范围。筛选同时作用于包定义、图集、声音、外部资源与代码生成，
+未选中的包不会因为 Atlas 遍历整个工程而产生文件。
 
-`publish()` 的 `output` 仍由宿主传入。宿主可以直接指定路径，也可以读取本页所述
-工程/包级设置后解析路径；调用参数中的输出路径不修改工程设置。
+`output` 是一次调用的临时覆盖，不修改 FairyGUI 工程或包级发布设置。未显式传入时，仍按上一节规则
+使用工程中已配置的路径。
 
 ## 代码生成的当前实现范围
 
@@ -148,6 +174,7 @@ OpenFairyGUI 当前已经把“代码生成”接入现有 `publish` 流程，�
 说明：
 - 这里描述的是 OpenFairyGUI 当前已实现行为，不等同于 FairyGUI 编辑器所有项目类型 / `codeType` 模板都已支持。
 - 这里的 `fgui` TypeScript 代码生成口径已经不再依赖 `codeType` 字段分流；当前由 Layabox 与 Cocos Creator 共用同一条 TS lane。
+- `publish` 流程也支持 OpenFairyGUI publish 插件接管代码生成。插件目录、生命周期、失败降级，以及与 FairyGUI 编辑器插件的关系见 [Publish 插件](./publish-plugins.md)。
 
 ## 包级图集设置真实属性
 
@@ -228,7 +255,9 @@ OpenFairyGUI 当前已经把“代码生成”接入现有 `publish` 流程，�
 | `branchPath` | 分支输出路径 |
 | `seperatedAtlasForBranch` | 分支 atlas 是否单独输出 |
 
-`includeHighResolution` 可以理解为 `2x`、`3x`、`4x` 资源开关对应的位掩码字段。
+`includeHighResolution` 可以理解为 `2x`、`3x`、`4x` 资源开关对应的位掩码字段：`@2x=1`、`@3x=2`、`@4x=4`。
+
+发布流程只发现并链接工程中已经存在的同路径、同分支、同类型 `@2x` / `@3x` / `@4x` 资源，例如 `icon.png` 对应 `icon@2x.png`。它们会作为独立 `image` / `movieclip` package item 写入，再由基础 item 的 high-resolution 列表引用；发布期不会主动把原始位图缩放或放大生成高分辨率资源。
 
 `branchProcessing` 当前可见语义如下：
 

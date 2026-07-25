@@ -4,8 +4,8 @@ import os from 'node:os';
 import path from 'node:path';
 import {
 	inspectOpaqueProjectXml,
-	NodeIO,
 } from '../src/index.js';
+import { NodeIO } from '../src/node.js';
 
 const PROJECT_XML = `<?xml version="1.0" encoding="utf-8"?>
 <projectDescription id="opaque-project" type="Unity" version="3.0" vendorProject="keep">

@@ -20,8 +20,9 @@ const BinItemType = {
 	Font: 5,
 	Swf: 6,
 	Misc: 7,
-	Spine: 8,
-	DragonBones: 9,
+	Unknown: 8,
+	Spine: 9,
+	DragonBones: 10,
 } as const;
 
 type BinItemType = (typeof BinItemType)[keyof typeof BinItemType];
@@ -55,6 +56,10 @@ interface BranchAwarePackageResource {
 	setPath(path: string): unknown;
 	setBranch(branch: string): unknown;
 	setBranchItemIds(ids: string[]): unknown;
+}
+
+interface HighResolutionAwarePackageResource {
+	setHighResolutionItemIds?(ids: Array<string | null>): unknown;
 }
 
 function normalizePackageResourcePath(path: string): string {
@@ -494,11 +499,15 @@ export class BinaryReader {
 					else branchItemIds = [buf.readS() ?? ''];
 				}
 				const highResCnt = buf.getUint8();
-				if (highResCnt > 0) buf.readSArray(highResCnt);
+				const highResolutionItemIds: Array<string | null> = [];
+				for (let highResIndex = 0; highResIndex < highResCnt; highResIndex++) {
+					highResolutionItemIds.push(buf.readS());
+				}
 				if (createdResource) {
 					createdResource.setPath(itemPath);
 					createdResource.setBranch(branchName);
 					createdResource.setBranchItemIds(branchItemIds);
+					(createdResource as HighResolutionAwarePackageResource).setHighResolutionItemIds?.(highResolutionItemIds);
 				}
 			}
 

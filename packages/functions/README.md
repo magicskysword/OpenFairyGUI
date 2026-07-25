@@ -1,6 +1,6 @@
 # @magicskysword/openfairygui-functions
 
-Composable authoring and publish functions built on top of `@magicskysword/openfairygui-core`.
+Composable authoring workflows and thin application seams built on top of `@magicskysword/openfairygui-core`.
 
 ## Install
 
@@ -11,14 +11,91 @@ npm install --save @magicskysword/openfairygui-core @magicskysword/openfairygui-
 ## Usage
 
 ```ts
-import { NodeIO } from '@magicskysword/openfairygui-core';
-import { inspect, publish } from '@magicskysword/openfairygui-functions';
+import { NodeIO } from '@magicskysword/openfairygui-core/node';
+import { inspect } from '@magicskysword/openfairygui-functions';
+import { publishNode } from '@magicskysword/openfairygui-functions/node';
 
 const io = new NodeIO();
 const doc = await io.readProject('./MyProject/MyProject.fairy');
 
 const report = inspect(doc);
-await doc.transform(publish({ output: './release' }));
+await publishNode({ document: doc, output: './release' });
+```
+
+`publishNode` owns the standard Node filesystem, Sharp raster backend, and project plugin discovery. It fails when a complete runtime artifact cannot be generated. The root `publish()` export remains the lower-level capability-injected core for custom hosts; it is layout-only only when no output directory is requested.
+
+The Fork additionally keeps two Headless-oriented capabilities:
+
+- `publish({ mode: 'definitions' })` emits package definitions without rebuilding atlases.
+- `publishToMemory(document, options)` returns runtime package and atlas bytes without writing source-project files.
+
+## Browser LayaBox publish
+
+Use `@magicskysword/openfairygui-core/web` to read the raw project, then publish through the browser-only entry. Both filesystems are caller-owned, so they can be File System Access, OPFS, IndexedDB, ZIP, or memory adapters.
+
+```ts
+import { WebIO } from '@magicskysword/openfairygui-core/web';
+import { publishBrowser } from '@magicskysword/openfairygui-functions/web';
+
+const document = await new WebIO(sourceFileSystem).readProject('Project.fairy');
+const result = await publishBrowser({
+	document,
+	sourceFileSystem,
+	outputFileSystem,
+	projectType: 'layabox',
+	output: '.fairygui-runtime',
+});
+
+if (!result.success) console.error(result.diagnostics);
+```
+
+The browser entry uses native Canvas APIs for atlas PNGs, writes only through `outputFileSystem`, supplies no Node plugin capability, and disables non-runtime code generation.
+
+Publish plugins are documented in the repository guide:
+
+- https://github.com/magicskysword/OpenFairyGUI/blob/main/docs/publish-plugins.md
+
+## UAM authoring seam
+
+`@magicskysword/openfairygui-functions` also exposes a thin stateless wrapper over the UAM
+transaction contract from `@magicskysword/openfairygui-core`.
+
+This seam:
+
+- accepts `UamProject` + `UamTransactionOperation[]`
+- returns structured app-level success / failure results
+- does not expose `Document`
+- does not define a second selector / operation grammar
+- does not wrap `publish` or `restore`
+
+The transaction surface includes resource rename/move, byte-backed binary resource
+add/replace/remove, and add/update/remove for `display`, `display2`, `look`, `xy`,
+`size`, `color`, `animation`, `text`, `icon`, and `fontSize` gears. Resource
+rename/move/replace/remove requires `sourceBytes`; opt in with
+`ProjectReader.read(path, { hydrateResourceBytes: true })` before lifting a project to
+UAM. Source bytes are written back with the project, and stale source files are removed
+only after all replacement content succeeds.
+
+```ts
+import {
+	type UamProject,
+	type UamTransactionOperation,
+} from '@magicskysword/openfairygui-core';
+import { applyUamTransactionApp } from '@magicskysword/openfairygui-functions';
+
+const project: UamProject = /* project read and lifted with hydrateResourceBytes */;
+const operations: UamTransactionOperation[] = [
+	{
+		kind: 'renameResource',
+		selector: { packageId: 'pkg001', resourceId: 'img001' },
+		newName: 'renamed.png',
+	},
+];
+
+const result = applyUamTransactionApp({ project, operations });
+if (!result.ok) {
+	console.error(result.error.code, result.error.stage, result.error.message);
+}
 ```
 
 Repository:

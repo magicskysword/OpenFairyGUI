@@ -15,6 +15,7 @@ interface IImageResource extends IExtensibleProperty {
 	path: string;
 	branch: string;
 	branchItemIds: string[];
+	highResolutionItemIds: Array<string | null>;
 	width: number;
 	height: number;
 	exported: boolean;
@@ -49,6 +50,7 @@ export class ImageResource extends ExtensibleProperty<IImageResource> {
 			path: '',
 			branch: '',
 			branchItemIds: [],
+			highResolutionItemIds: [],
 			width: 0,
 			height: 0,
 			exported: false,
@@ -80,6 +82,9 @@ export class ImageResource extends ExtensibleProperty<IImageResource> {
 
 	public getBranchItemIds(): string[] { return [...this.get('branchItemIds')]; }
 	public setBranchItemIds(ids: string[]): this { return this.set('branchItemIds', [...ids]); }
+
+	public getHighResolutionItemIds(): Array<string | null> { return [...this.get('highResolutionItemIds')]; }
+	public setHighResolutionItemIds(ids: Array<string | null>): this { return this.set('highResolutionItemIds', [...ids]); }
 
 	public getWidth(): number { return this.get('width'); }
 	public setWidth(w: number): this { return this.set('width', w); }
@@ -113,6 +118,10 @@ export class ImageResource extends ExtensibleProperty<IImageResource> {
 
 	public getImageData(): FairyBuffer | null { return this.getRef('imageData' as never) as FairyBuffer | null; }
 	public setImageData(buffer: FairyBuffer | null): this { return this.setRef('imageData' as never, buffer as never); }
+
+	/** Primary source-file bytes for this image resource. */
+	public getSourceData(): FairyBuffer | null { return this.getImageData(); }
+	public setSourceData(buffer: FairyBuffer | null): this { return this.setImageData(buffer); }
 
 	public getPixelHitTestData(): PixelHitTestData | null {
 		const pixelWidth = this.get('pixelHitTestPixelWidth');

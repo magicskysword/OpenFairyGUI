@@ -22,8 +22,9 @@ const BinItemType = {
 	Atlas: 4,
 	Font: 5,
 	Misc: 7,
-	Spine: 8,
-	DragonBones: 9,
+	Unknown: 8,
+	Spine: 9,
+	DragonBones: 10,
 } as const;
 
 /**
@@ -179,6 +180,10 @@ interface BranchAwareBinaryItem {
 	getBranchItemIds?(): string[];
 }
 
+interface HighResolutionBinaryItem {
+	getHighResolutionItemIds?(): Array<string | null>;
+}
+
 /**
  * Sort resources to match editor binary output order.
  * Editor sorts: non-exported first, then alphabetical by type, then by ID.
@@ -273,7 +278,6 @@ export class BinaryWriter {
 		const branchItemIdsMap = buildBranchItemIdsMap(pkg, branchNames);
 		const publishedItemIdMap = new Map(resources.map((resource) => [resource.getId(), getPublishedItemId(resource)]));
 		const highResolutionItemIdsMap = inferHighResolutionItemIds(resources);
-
 		// Collect sprites from Atlas/Sprite property nodes OR extras.sprites (BinaryReader round-trip)
 		const sprites: BinarySpriteEntry[] = [];
 
@@ -561,12 +565,15 @@ export class BinaryWriter {
 				for (const branchItemId of branchItemIds) {
 					data.writeSEx(branchItemId || null);
 				}
-				const highResolutionItemIds = 'getExtras' in res
-					? highResolutionItemIdsMap.get(res.getId()) ?? []
-					: [];
+				const highResolutionItemIds = getItemHighResolutionItemIds(
+					res,
+					publishedItemIdMap,
+					packageItemIds,
+					highResolutionItemIdsMap,
+				);
 				data.writeUint8(highResolutionItemIds.length);
-				for (const itemId of highResolutionItemIds) {
-					data.writeSEx(itemId ? publishedItemIdMap.get(itemId) ?? itemId : null);
+				for (const highResolutionItemId of highResolutionItemIds) {
+					data.writeS(highResolutionItemId);
 				}
 			}
 
@@ -999,6 +1006,28 @@ function getItemBranchItemIds(
 	const inferred = branchItemIdsMap.get(buildBranchResourceKey(item));
 	if (!inferred) return [];
 	return inferred.some((value) => !!value) ? [...inferred] : [];
+}
+
+function getItemHighResolutionItemIds(
+	item: BinaryPackageItem,
+	publishedItemIdMap: Map<string, string>,
+	packageItemIds: Set<string>,
+	inferredItemIdsMap: Map<string, Array<string | null>>,
+): Array<string | null> {
+	const highResolutionAware = item as HighResolutionBinaryItem;
+	const explicitIds = highResolutionAware.getHighResolutionItemIds?.() ?? [];
+	const rawIds = explicitIds.length > 0
+		? explicitIds
+		: inferredItemIdsMap.get(item.getId()) ?? [];
+	const resolvedIds = rawIds.map((id) => {
+		if (!id) return null;
+		const publishedId = publishedItemIdMap.get(id) ?? id;
+		return packageItemIds.has(publishedId) ? publishedId : null;
+	});
+	while (resolvedIds.length > 0 && !resolvedIds[resolvedIds.length - 1]) {
+		resolvedIds.pop();
+	}
+	return resolvedIds;
 }
 
 function getAtlasId(atlas: Atlas): string {
