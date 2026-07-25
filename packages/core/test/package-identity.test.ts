@@ -19,12 +19,12 @@ test('fork packages expose stable magicskysword names and semver dependencies', 
 		url: 'https://github.com/magicskysword/OpenFairyGUI/issues',
 	});
 	t.is(core.name, '@magicskysword/openfairygui-core');
-	t.is(core.version, '0.2.2');
+	t.is(core.version, '0.2.3');
 	t.is(functions.name, '@magicskysword/openfairygui-functions');
-	t.is(functions.version, '0.2.2');
+	t.is(functions.version, '0.2.3');
 	t.is(
 		functions.dependencies['@magicskysword/openfairygui-core'],
-		'^0.2.2',
+		'^0.2.3',
 		'published manifests must use a real SemVer range instead of a sibling path or workspace protocol',
 	);
 });

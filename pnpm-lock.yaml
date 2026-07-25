@@ -107,7 +107,7 @@ importers:
   packages/functions:
     dependencies:
       '@magicskysword/openfairygui-core':
-        specifier: ^0.2.2
+        specifier: ^0.2.3
         version: link:../core
       jiti:
         specifier: ^2.6.1
