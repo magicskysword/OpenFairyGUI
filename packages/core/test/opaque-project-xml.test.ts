@@ -4,8 +4,8 @@ import os from 'node:os';
 import path from 'node:path';
 import {
 	inspectOpaqueProjectXml,
-	NodeIO,
 } from '../src/index.js';
+import { NodeIO } from '../src/node.js';
 
 const PROJECT_XML = `<?xml version="1.0" encoding="utf-8"?>
 <projectDescription id="opaque-project" type="Unity" version="3.0" vendorProject="keep">
@@ -69,8 +69,11 @@ test('project writer structurally preserves unknown XML while editing known fiel
 		t.truthy(first);
 		first?.setText('edited');
 
-		const n1 = component?.getChildById('n1');
-		if (component && n1) component.moveChild(n1, 0);
+		const n0 = component?.getChildById('n0');
+		if (component && n0) {
+			component.removeChild(n0);
+			component.addChild(n0);
+		}
 
 		await io.writeProject(doc, outputProjectPath);
 
