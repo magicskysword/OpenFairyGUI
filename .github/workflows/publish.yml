@@ -55,13 +55,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Run tests
-        run: pnpm test
-
       - name: Build packages
         run: |
           pnpm --filter @magicskysword/openfairygui-core build
           pnpm --filter @magicskysword/openfairygui-functions build
+
+      - name: Run tests
+        run: pnpm test
 
       - name: Publish core
         shell: bash

@@ -57,11 +57,25 @@ test('npm trusted publishing is tokenless, version-gated, and dependency ordered
 	t.regex(workflow, /-run\\\./);
 	t.regex(workflow, /pnpm test/);
 
+	const installStep = workflow.indexOf('- name: Install dependencies');
+	const buildStep = workflow.indexOf('- name: Build packages');
+	const testStep = workflow.indexOf('- name: Run tests');
+	const coreBuild = workflow.indexOf(
+		'pnpm --filter @magicskysword/openfairygui-core build',
+	);
+	const functionsBuild = workflow.indexOf(
+		'pnpm --filter @magicskysword/openfairygui-functions build',
+	);
 	const corePublish = workflow.indexOf('npm publish ./packages/core --access public');
 	const functionsPublish = workflow.indexOf(
 		'npm publish ./packages/functions --access public',
 	);
-	t.true(corePublish >= 0);
+	t.true(installStep >= 0);
+	t.true(buildStep > installStep);
+	t.true(coreBuild > buildStep);
+	t.true(functionsBuild > coreBuild);
+	t.true(testStep > functionsBuild);
+	t.true(corePublish > testStep);
 	t.true(functionsPublish > corePublish);
 	t.notRegex(workflow, /NODE_AUTH_TOKEN|NPM_TOKEN|--provenance/);
 });
