@@ -62,6 +62,11 @@ export {
 	type ResolvePublishOptionsOverrides,
 } from './publish.js';
 export {
+	publishToMemory,
+	type MemoryPublishArtifact,
+	type PublishToMemoryOptions,
+} from './publish-memory.js';
+export {
 	applyUamTransactionApp,
 	type ApplyUamTransactionAppDiagnostic,
 	type ApplyUamTransactionAppError,
