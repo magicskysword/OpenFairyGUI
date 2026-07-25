@@ -18,7 +18,6 @@ import {
 	parseSidePair,
 	ensureArray,
 } from '../utils/xml-utils.js';
-import { inspectOpaqueProjectXml } from './opaque-project-xml.js';
 import { PROJECT_XML_PROTOCOL, readXmlAttr, type XmlNodeProtocol } from './project-xml-protocol.js';
 import { ReaderContext } from './reader-context.js';
 
@@ -820,12 +819,10 @@ export class ProjectReader {
 			root.setProjectId(projDesc.id ?? '');
 			root.setProjectType(this._resolveProjectType(projDesc.type ?? ''));
 			root.setVersion(projDesc.version ?? '');
-			if (inspectOpaqueProjectXml('project', fairyContent).length > 0) {
-				root.setExtras({
-					...root.getExtras(),
-					_sourceProjectXml: fairyContent,
-				});
-			}
+			root.setExtras({
+				...root.getExtras(),
+				_sourceProjectXml: fairyContent,
+			});
 		}
 
 		// 2. Read settings
@@ -960,17 +957,15 @@ export class ProjectReader {
 				pkg.setJpegQuality(parseInt2(jpegQuality, 0));
 			}
 		}
-		if (inspectOpaqueProjectXml(branchName ? 'branch' : 'package', content).length > 0) {
-			const packageExtras = pkg.getExtras();
-			const sourceXmlByBranch = {
-				...(packageExtras._sourcePackageXmlByBranch as Record<string, string> | undefined),
-				[branchName]: content,
-			};
-			pkg.setExtras({
-				...packageExtras,
-				_sourcePackageXmlByBranch: sourceXmlByBranch,
-			});
-		}
+		const packageExtras = pkg.getExtras();
+		const sourceXmlByBranch = {
+			...(packageExtras._sourcePackageXmlByBranch as Record<string, string> | undefined),
+			[branchName]: content,
+		};
+		pkg.setExtras({
+			...packageExtras,
+			_sourcePackageXmlByBranch: sourceXmlByBranch,
+		});
 
 		// Publish name
 		const publish = !branchName ? (desc as PackageDescriptionNode).publish : undefined;
@@ -1289,12 +1284,10 @@ export class ProjectReader {
 		const xml = parseXML(xmlContent);
 		const compNode = getXmlNode<ComponentXmlNode>(xml.component);
 		if (!compNode) return;
-		if (inspectOpaqueProjectXml('component', xmlContent).length > 0) {
-			comp.setExtras({
-				...comp.getExtras(),
-				_sourceComponentXml: xmlContent,
-			});
-		}
+		comp.setExtras({
+			...comp.getExtras(),
+			_sourceComponentXml: xmlContent,
+		});
 		const orderedDisplayItems = getOrderedDisplayListItems(xmlContent);
 
 		// fast-xml-parser may wrap in array due to isArray config

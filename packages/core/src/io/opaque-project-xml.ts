@@ -386,7 +386,11 @@ export function preserveOpaqueProjectXml(
 			`Cannot preserve opaque XML: source root "${source.name}" does not match generated root "${generated.name}".`,
 		);
 	}
-	const merged = mergeElement(source, generated, PROJECT_SCHEMAS[kind]);
+	const schema = PROJECT_SCHEMAS[kind];
+	const findings: OpaqueXmlFinding[] = [];
+	inspectElement(source, schema, `/${source.name}`, findings);
+	if (findings.length === 0) return generatedXml;
+	const merged = mergeElement(source, generated, schema);
 	return `<?xml version="1.0" encoding="utf-8"?>\n${renderElement(merged)}\n`;
 }
 

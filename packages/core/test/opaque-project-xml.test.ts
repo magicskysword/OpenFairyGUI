@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {
 	inspectOpaqueProjectXml,
+	preserveOpaqueProjectXml,
 } from '../src/index.js';
 import { NodeIO } from '../src/node.js';
 
@@ -87,7 +88,7 @@ async function createKnownProject(): Promise<{ directory: string; projectPath: s
 	return { directory, projectPath };
 }
 
-test('reader retains source snapshots only for XML containing opaque structure', async (t) => {
+test('reader retains source snapshots for complete Headless writeback', async (t) => {
 	const opaque = await createProject();
 	const known = await createKnownProject();
 	const io = new NodeIO();
@@ -103,13 +104,23 @@ test('reader retains source snapshots only for XML containing opaque structure',
 		t.is(typeof opaqueDocument.getRoot().getExtras()._sourceProjectXml, 'string');
 		t.is(typeof opaquePackage?.getExtras()._sourcePackageXmlByBranch, 'object');
 		t.is(typeof opaqueComponent?.getExtras()._sourceComponentXml, 'string');
-		t.false(Object.hasOwn(knownDocument.getRoot().getExtras(), '_sourceProjectXml'));
-		t.false(Object.hasOwn(knownPackage?.getExtras() ?? {}, '_sourcePackageXmlByBranch'));
-		t.false(Object.hasOwn(knownComponent?.getExtras() ?? {}, '_sourceComponentXml'));
+		t.is(typeof knownDocument.getRoot().getExtras()._sourceProjectXml, 'string');
+		t.is(typeof knownPackage?.getExtras()._sourcePackageXmlByBranch, 'object');
+		t.is(typeof knownComponent?.getExtras()._sourceComponentXml, 'string');
 	} finally {
 		await fs.rm(opaque.directory, { recursive: true, force: true });
 		await fs.rm(known.directory, { recursive: true, force: true });
 	}
+});
+
+test('known-only source snapshots leave canonical generated XML unchanged', (t) => {
+	const generatedProject = KNOWN_PROJECT_XML.replace('known-project', 'generated-project');
+	const generatedPackage = KNOWN_PACKAGE_XML.replace('pkg00001', 'pkg00002');
+	const generatedComponent = KNOWN_COMPONENT_XML.replace('text="known"', 'text="generated"');
+
+	t.is(preserveOpaqueProjectXml('project', KNOWN_PROJECT_XML, generatedProject), generatedProject);
+	t.is(preserveOpaqueProjectXml('package', KNOWN_PACKAGE_XML, generatedPackage), generatedPackage);
+	t.is(preserveOpaqueProjectXml('component', KNOWN_COMPONENT_XML, generatedComponent), generatedComponent);
 });
 
 test('project writer structurally preserves unknown XML while editing known fields', async (t) => {
