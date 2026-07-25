@@ -216,6 +216,18 @@
 | `filter` |  | 滤镜类型 |
 | `filterData` |  | 滤镜数据 |
 
+`fillOrigin` 使用 FairyGUI runtime 的数值枚举。合法组合如下：
+
+| `fillMethod` | 合法 `fillOrigin` |
+|---|---|
+| `hz` | `2`（left）、`3`（right） |
+| `vt` | `0`（top）、`1`（bottom） |
+| `radial90` | `0`（top-left）、`1`（top-right）、`2`（bottom-left）、`3`（bottom-right） |
+| `radial180` / `radial360` | `0`（top）、`1`（bottom）、`2`（left）、`3`（right） |
+
+`fillClockwise` 只影响径向填充；`fillAmount` 是 `0..100` 的百分数。发布到
+runtime 时，图片元素保持原始宽高，填充值只控制可见区域。
+
 ### `<graph>`
 
 | 属性名 | Alias | 说明 |
@@ -270,6 +282,7 @@
 | `xy` |  | 位置 |
 | `size` |  | 尺寸 |
 | `pivot` |  | pivot |
+| `anchor` |  | pivot 是否作为坐标锚点 |
 | `scale` |  | 缩放 |
 | `group` |  | 所属 group |
 | `grayed` |  | 是否置灰 |
@@ -317,6 +330,8 @@
 | `xy` |  | 位置 |
 | `size` |  | 尺寸 |
 | `restrictSize` |  | 尺寸限制 |
+| `pivot` |  | pivot |
+| `anchor` |  | pivot 是否作为坐标锚点 |
 | `customData` |  | 自定义数据 |
 | `group` |  | 所属 group |
 | `font` |  | 字体 |
@@ -352,6 +367,9 @@
 
 ### `<inputtext>`
 
+除下表专属字段外，`<inputtext>` 继承 `<text>` 的位置、尺寸、pivot、anchor
+与文本样式协议。
+
 | 属性名 | Alias | 说明 |
 |---|---|---|
 | `prompt` | `promptText` | 输入提示 |
@@ -361,6 +379,9 @@
 | `keyboardType` |  | 键盘类型 |
 
 ### `<richtext>`
+
+除下表专属字段外，`<richtext>` 继承 `<text>` 的位置、尺寸、pivot、anchor
+与文本样式协议。
 
 | 属性名 | Alias | 说明 |
 |---|---|---|
@@ -394,7 +415,10 @@
 | `vAlign` |  | 垂直对齐 |
 | `lineGap` |  | 行间距 |
 | `colGap` | `columnGap` | 列间距 |
-| `lineItemCount` | `lineCount` | 单行项目数量 |
+| `lineItemCount` |  | 主轴项目数量；映射取决于 layout |
+| `lineItemCount2` |  | pagination 的行数 |
+| `lineCount` |  | 旧式显式行数 |
+| `columnCount` |  | 旧式显式列数 |
 | `autoItemSize` | `autoResizeItem` | 自动调整项目尺寸 |
 | `selectionMode` |  | 选择模式 |
 | `selectionController` |  | 选择控制器 |
@@ -416,8 +440,23 @@
 | `autoClearItems` |  | 自动清空项目 |
 | `xy` |  | 位置 |
 | `size` |  | 尺寸 |
+| `pivot` |  | pivot |
+| `anchor` |  | pivot 是否作为坐标锚点 |
 | `group` |  | 所属 group |
 | `touchable` |  | 是否可触摸 |
+
+计数字段必须先按 `layout` 解释：
+
+| `layout` | `lineItemCount` | `lineItemCount2` |
+|---|---|---|
+| `flow_hz` | `columnCount` | 不参与布局 |
+| `flow_vt` | `lineCount` | 不参与布局 |
+| `pagination` | `columnCount` | `lineCount` |
+| `row` / `singleColumn` | 不参与布局 | 不参与布局 |
+
+旧式显式 `lineCount`、`columnCount` 仍直接映射同名模型字段；同一 XML
+同时存在规范字段时，以 `lineItemCount` / `lineItemCount2` 为准。规范写回只
+输出当前布局有意义的字段。
 
 ## 扩展子节点协议
 
