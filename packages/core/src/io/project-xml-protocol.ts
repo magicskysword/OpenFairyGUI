@@ -679,6 +679,7 @@ const LOADER_NODE = defineNode(
 	mergeAttrs(
 		XY_SIZE_ATTRS,
 		PIVOT_ATTRS,
+		ANCHOR_ATTRS,
 		SCALE_ATTRS,
 		GROUP_REF_ATTRS,
 		COMMON_DISPLAY_STATE_ATTRS,
@@ -697,6 +698,8 @@ const TEXT_NODE = defineNode(
 	mergeAttrs(
 		XY_SIZE_ATTRS,
 		RESTRICT_SIZE_ATTRS,
+		PIVOT_ATTRS,
+		ANCHOR_ATTRS,
 		{ customData: { canonical: 'customData' } },
 		GROUP_REF_ATTRS,
 		COMMON_DISPLAY_STATE_ATTRS,
@@ -710,6 +713,8 @@ const TEXT_INPUT_NODE = defineNode(
 	mergeAttrs(
 		XY_SIZE_ATTRS,
 		RESTRICT_SIZE_ATTRS,
+		PIVOT_ATTRS,
+		ANCHOR_ATTRS,
 		{ customData: { canonical: 'customData' } },
 		GROUP_REF_ATTRS,
 		COMMON_DISPLAY_STATE_ATTRS,
@@ -723,6 +728,8 @@ const RICH_TEXT_NODE = defineNode(
 	mergeAttrs(
 		XY_SIZE_ATTRS,
 		RESTRICT_SIZE_ATTRS,
+		PIVOT_ATTRS,
+		ANCHOR_ATTRS,
 		{ customData: { canonical: 'customData' } },
 		GROUP_REF_ATTRS,
 		COMMON_DISPLAY_STATE_ATTRS,
@@ -749,6 +756,8 @@ const GROUP_NODE = defineNode(
 const LIST_NODE = defineNode(
 	mergeAttrs(
 		XY_SIZE_ATTRS,
+		PIVOT_ATTRS,
+		ANCHOR_ATTRS,
 		GROUP_REF_ATTRS,
 		COMMON_DISPLAY_STATE_ATTRS,
 		LIST_PANEL_ATTRS,
