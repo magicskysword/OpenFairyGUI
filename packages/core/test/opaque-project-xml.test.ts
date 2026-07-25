@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {
 	inspectOpaqueProjectXml,
+	preserveOpaqueProjectXml,
 } from '../src/index.js';
 import { NodeIO } from '../src/node.js';
 
@@ -45,6 +46,26 @@ const COMPONENT_XML = `<?xml version="1.0" encoding="utf-8"?>
 </component>
 `;
 
+const KNOWN_PROJECT_XML = `<?xml version="1.0" encoding="utf-8"?>
+<projectDescription id="known-project" type="Unity" version="3.0"/>
+`;
+
+const KNOWN_PACKAGE_XML = `<?xml version="1.0" encoding="utf-8"?>
+<packageDescription id="pkg00001">
+  <resources>
+    <component id="abcde" name="Main.xml" path="/" exported="true"/>
+  </resources>
+</packageDescription>
+`;
+
+const KNOWN_COMPONENT_XML = `<?xml version="1.0" encoding="utf-8"?>
+<component size="200,100">
+  <displayList>
+    <text id="n0" name="title" xy="0,0" size="80,20" text="known"/>
+  </displayList>
+</component>
+`;
+
 async function createProject(): Promise<{ directory: string; projectPath: string }> {
 	const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'openfairygui-opaque-'));
 	const projectPath = path.join(directory, 'Opaque.fairy');
@@ -55,6 +76,52 @@ async function createProject(): Promise<{ directory: string; projectPath: string
 	await fs.writeFile(path.join(packageDirectory, 'Main.xml'), COMPONENT_XML, 'utf8');
 	return { directory, projectPath };
 }
+
+async function createKnownProject(): Promise<{ directory: string; projectPath: string }> {
+	const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'openfairygui-known-'));
+	const projectPath = path.join(directory, 'Known.fairy');
+	const packageDirectory = path.join(directory, 'assets', 'Known');
+	await fs.mkdir(packageDirectory, { recursive: true });
+	await fs.writeFile(projectPath, KNOWN_PROJECT_XML, 'utf8');
+	await fs.writeFile(path.join(packageDirectory, 'package.xml'), KNOWN_PACKAGE_XML, 'utf8');
+	await fs.writeFile(path.join(packageDirectory, 'Main.xml'), KNOWN_COMPONENT_XML, 'utf8');
+	return { directory, projectPath };
+}
+
+test('reader retains source snapshots for complete Headless writeback', async (t) => {
+	const opaque = await createProject();
+	const known = await createKnownProject();
+	const io = new NodeIO();
+
+	try {
+		const opaqueDocument = await io.readProject(opaque.projectPath);
+		const knownDocument = await io.readProject(known.projectPath);
+		const opaquePackage = opaqueDocument.getRoot().getPackage('Opaque');
+		const knownPackage = knownDocument.getRoot().getPackage('Known');
+		const opaqueComponent = opaquePackage?.getComponent('Main');
+		const knownComponent = knownPackage?.getComponent('Main');
+
+		t.is(typeof opaqueDocument.getRoot().getExtras()._sourceProjectXml, 'string');
+		t.is(typeof opaquePackage?.getExtras()._sourcePackageXmlByBranch, 'object');
+		t.is(typeof opaqueComponent?.getExtras()._sourceComponentXml, 'string');
+		t.is(typeof knownDocument.getRoot().getExtras()._sourceProjectXml, 'string');
+		t.is(typeof knownPackage?.getExtras()._sourcePackageXmlByBranch, 'object');
+		t.is(typeof knownComponent?.getExtras()._sourceComponentXml, 'string');
+	} finally {
+		await fs.rm(opaque.directory, { recursive: true, force: true });
+		await fs.rm(known.directory, { recursive: true, force: true });
+	}
+});
+
+test('known-only source snapshots leave canonical generated XML unchanged', (t) => {
+	const generatedProject = KNOWN_PROJECT_XML.replace('known-project', 'generated-project');
+	const generatedPackage = KNOWN_PACKAGE_XML.replace('pkg00001', 'pkg00002');
+	const generatedComponent = KNOWN_COMPONENT_XML.replace('text="known"', 'text="generated"');
+
+	t.is(preserveOpaqueProjectXml('project', KNOWN_PROJECT_XML, generatedProject), generatedProject);
+	t.is(preserveOpaqueProjectXml('package', KNOWN_PACKAGE_XML, generatedPackage), generatedPackage);
+	t.is(preserveOpaqueProjectXml('component', KNOWN_COMPONENT_XML, generatedComponent), generatedComponent);
+});
 
 test('project writer structurally preserves unknown XML while editing known fields', async (t) => {
 	const source = await createProject();
