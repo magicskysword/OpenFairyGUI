@@ -1045,7 +1045,7 @@ test('writer: uses canonical XML attr names for component root, loader, richtext
 	list.setId('n2');
 	list.setLayout(2);
 	list.setColumnGap(8);
-	list.setLineCount(9999);
+	list.setColumnCount(9999);
 	list.setAutoResizeItem(false);
 	list.setSelectionController('page');
 	list.setDefaultItem('ui://pkgProtocol/tab');
@@ -1147,7 +1147,7 @@ test('writer: uses canonical XML attr names for component root, loader, richtext
 		t.true(byId.get('n1_5')?.getSingleLine?.(), 'richtext singleLine survives round-trip');
 		t.is(byId.get('n1_5')?.getStrokeSize?.(), 2, 'richtext strokeSize survives round-trip');
 		t.is(byId.get('n2')?.getColumnGap?.(), 8, 'list colGap survives round-trip');
-		t.is(byId.get('n2')?.getLineCount?.(), 9999, 'list lineItemCount survives round-trip');
+		t.is(byId.get('n2')?.getColumnCount?.(), 9999, 'flow list lineItemCount survives as columnCount');
 		t.false(byId.get('n2')?.getAutoResizeItem?.(), 'list autoItemSize survives round-trip');
 		t.is(byId.get('n2')?.getSelectionController?.(), 'page', 'list selectionController survives round-trip');
 	} finally {
@@ -1217,8 +1217,8 @@ test('round-trip: list scroll attrs and static items survive write→read', asyn
 		await io.writeProject(doc, outFairy);
 		const listXml = await fs.readFile(path.join(tmpDir, 'assets', 'Demo3', 'Lists.xml'), 'utf-8');
 		t.true(listXml.includes('controllers="bg,0,type,0"'), 'list static item writes canonical controllers attr');
-		t.true(listXml.includes('lineItemCount="5"'), 'list writes horizontal item count');
-		t.true(listXml.includes('lineItemCount2="3"'), 'pagination list writes vertical item count');
+		t.true(listXml.includes('lineItemCount="3"'), 'pagination list writes horizontal column count');
+		t.true(listXml.includes('lineItemCount2="5"'), 'pagination list writes vertical row count');
 
 		const doc2 = await io.readProject(outFairy);
 		const comp2 = doc2.getRoot().getPackage('Demo3')?.listComponents().find((item) => item.getName() === 'Lists');
