@@ -230,6 +230,11 @@ interface BranchAtlasGroup {
 	inputs: InputItem[];
 }
 
+interface AtlasPageIndexAllocator {
+	allocate(): number;
+	advanceTo(minimum: number): void;
+}
+
 function getSelectedSkeletonDependencyImageIds(resources: PackageResource[]): Set<string> {
 	const imageIds = new Set<string>();
 	const resourcesById = new Map(resources.map((resource) => [resource.getId(), resource] as const));
@@ -585,13 +590,29 @@ export function atlas(_options: AtlasOptions = {}): Transform {
 			}
 			let totalPageCount = 0;
 			let usedDirectOutput = false;
-			const { autoInputs, fixedPageGroups, standaloneGroups, reservedPageIndexes } = groupStandaloneInputs(
+			const {
+				autoInputs,
+				fixedPageGroups,
+				standaloneGroups,
+				reservedPageIndexesByBranch,
+				branchOrdinalByName,
+			} = groupStandaloneInputs(
 				doc,
 				inputs,
 				options,
 			);
-			const branchGroups = buildBranchAtlasGroups(doc, autoInputs, options);
-			const branchPageOffsets = new Map<number, number>();
+			const branchGroups = buildBranchAtlasGroups(doc, autoInputs, options, branchOrdinalByName);
+			const pageAllocators = new Map<number, AtlasPageIndexAllocator>();
+			const pageAllocatorFor = (branchOrdinal: number): AtlasPageIndexAllocator => {
+				let allocator = pageAllocators.get(branchOrdinal);
+				if (!allocator) {
+					allocator = createAtlasPageIndexAllocator(
+						reservedPageIndexesByBranch.get(branchOrdinal) ?? new Set(),
+					);
+					pageAllocators.set(branchOrdinal, allocator);
+				}
+				return allocator;
+			};
 
 			for (const group of branchGroups) {
 				const directOutput =
@@ -613,25 +634,24 @@ export function atlas(_options: AtlasOptions = {}): Transform {
 					totalPageCount += 1;
 					continue;
 				}
-				const pageStart = reserveAutoPageStart(branchPageOffsets, group.branchOrdinal, reservedPageIndexes);
+				const pageAllocator = pageAllocatorFor(group.branchOrdinal);
 				const emittedPageCount = await emitPagedAtlasGroup(doc, pkg, allResources, group.inputs, {
 					branchName: group.branchName,
 					branchOrdinal: group.branchOrdinal,
-					pageStart,
+					pageIndexAt: () => pageAllocator.allocate(),
 					fileNameAt: (pageIndex) => resolveAtlasOutputFileName(pkg, pageIndex, group.branchName),
 					options,
 					encoder,
 					logger,
 				});
 				totalPageCount += emittedPageCount;
-				branchPageOffsets.set(group.branchOrdinal, pageStart + emittedPageCount);
 			}
 
 			for (const group of fixedPageGroups) {
 				const emittedPageCount = await emitPagedAtlasGroup(doc, pkg, allResources, group.inputs, {
 					branchName: group.branchName,
 					branchOrdinal: group.branchOrdinal,
-					pageStart: group.pageIndex,
+					pageIndexAt: () => group.pageIndex,
 					forceSinglePage: true,
 					fileNameAt: () => resolveAtlasOutputFileName(pkg, group.pageIndex, group.branchName),
 					options,
@@ -641,25 +661,19 @@ export function atlas(_options: AtlasOptions = {}): Transform {
 				totalPageCount += emittedPageCount;
 			}
 
-			const standalonePageOffsets = new Map(branchPageOffsets);
 			for (const group of fixedPageGroups) {
-				const nextPageIndex = group.pageIndex + 1;
-				const current = standalonePageOffsets.get(group.branchOrdinal) ?? 0;
-				if (nextPageIndex > current) standalonePageOffsets.set(group.branchOrdinal, nextPageIndex);
+				pageAllocatorFor(group.branchOrdinal).advanceTo(group.pageIndex + 1);
 			}
 
 			for (const group of standaloneGroups) {
+				const pageAllocator = pageAllocatorFor(group.branchOrdinal);
 				const emittedPageCount = await emitStandaloneAtlasGroup(doc, pkg, group, {
-					atlasIndexStart: standalonePageOffsets.get(group.branchOrdinal) ?? 0,
+					atlasIndexAt: () => pageAllocator.allocate(),
 					options,
 					encoder,
 					logger,
 				});
 				totalPageCount += emittedPageCount;
-				standalonePageOffsets.set(
-					group.branchOrdinal,
-					(standalonePageOffsets.get(group.branchOrdinal) ?? 0) + emittedPageCount,
-				);
 			}
 
 			if (usedDirectOutput) {
@@ -672,7 +686,12 @@ export function atlas(_options: AtlasOptions = {}): Transform {
 	});
 }
 
-function buildBranchAtlasGroups(doc: Document, inputs: InputItem[], options: AtlasOptions): BranchAtlasGroup[] {
+function buildBranchAtlasGroups(
+	doc: Document,
+	inputs: InputItem[],
+	options: AtlasOptions,
+	branchOrdinalByName: ReadonlyMap<string, number>,
+): BranchAtlasGroup[] {
 	if (!options.separatedAtlasForBranch) {
 		return [{ branchName: '', branchOrdinal: 0, inputs }];
 	}
@@ -711,23 +730,28 @@ function buildBranchAtlasGroups(doc: Document, inputs: InputItem[], options: Atl
 
 	return orderedKeys
 		.filter((branchName) => (groups.get(branchName)?.length ?? 0) > 0)
-		.map((branchName, index) => ({
+		.map((branchName) => ({
 			branchName,
-			branchOrdinal: index,
+			branchOrdinal: branchOrdinalByName.get(branchName) ?? 0,
 			inputs: groups.get(branchName) ?? [],
 		}));
 }
 
-function reserveAutoPageStart(
-	branchPageOffsets: Map<number, number>,
-	branchOrdinal: number,
-	reservedPageIndexes: Set<number>,
-): number {
-	let pageIndex = branchPageOffsets.get(branchOrdinal) ?? 0;
-	while (branchOrdinal === 0 && reservedPageIndexes.has(pageIndex)) {
-		pageIndex += 1;
-	}
-	return pageIndex;
+function createAtlasPageIndexAllocator(reservedPageIndexes: ReadonlySet<number>): AtlasPageIndexAllocator {
+	let nextPageIndex = 0;
+	return {
+		allocate(): number {
+			while (reservedPageIndexes.has(nextPageIndex)) {
+				nextPageIndex += 1;
+			}
+			const allocated = nextPageIndex;
+			nextPageIndex += 1;
+			return allocated;
+		},
+		advanceTo(minimum: number): void {
+			if (minimum > nextPageIndex) nextPageIndex = minimum;
+		},
+	};
 }
 
 async function emitPagedAtlasGroup(
@@ -738,7 +762,7 @@ async function emitPagedAtlasGroup(
 	context: {
 		branchName: string;
 		branchOrdinal: number;
-		pageStart: number;
+		pageIndexAt: (pageOffset: number) => number;
 		fileNameAt: (pageIndex: number) => string;
 		options: AtlasOptions;
 		encoder: AtlasRasterBackend | undefined;
@@ -752,7 +776,7 @@ async function emitPagedAtlasGroup(
 
 	for (let pageOffset = 0; pageOffset < pages.length; pageOffset += 1) {
 		const page = pages[pageOffset];
-		const pageIndex = context.pageStart + pageOffset;
+		const pageIndex = context.pageIndexAt(pageOffset);
 		const atlasNode = doc.createAtlas(`atlas${resolveAtlasIndex(context.branchOrdinal, pageIndex)}`);
 		atlasNode.setIndex(resolveAtlasIndex(context.branchOrdinal, pageIndex));
 		atlasNode.setFile(context.fileNameAt(pageIndex));
@@ -780,7 +804,7 @@ async function emitStandaloneAtlasGroup(
 	pkg: Package,
 	group: StandaloneAtlasGroup,
 	context: {
-		atlasIndexStart: number;
+		atlasIndexAt: (pageOffset: number) => number;
 		options: AtlasOptions;
 		encoder: AtlasRasterBackend | undefined;
 		logger: ILogger;
@@ -803,7 +827,7 @@ async function emitStandaloneAtlasGroup(
 		const page = pages[pageOffset];
 		const baseFileName = resolveStandaloneAtlasOutputFileName(pkg, group.resource, group.branchName);
 		const atlasFileName = pages.length <= 1 ? baseFileName : insertFileNameSuffix(baseFileName, `_${pageOffset}`);
-		const atlasIndex = context.atlasIndexStart + pageOffset;
+		const atlasIndex = context.atlasIndexAt(pageOffset);
 		const atlasNode = doc.createAtlas(`atlas${resolveAtlasIndex(group.branchOrdinal, atlasIndex)}`);
 		atlasNode.setIndex(resolveAtlasIndex(group.branchOrdinal, atlasIndex));
 		atlasNode.setFile(atlasFileName);
@@ -1261,12 +1285,13 @@ function groupStandaloneInputs(
 	autoInputs: InputItem[];
 	fixedPageGroups: PagedAtlasGroup[];
 	standaloneGroups: StandaloneAtlasGroup[];
-	reservedPageIndexes: Set<number>;
+	reservedPageIndexesByBranch: Map<number, Set<number>>;
+	branchOrdinalByName: Map<string, number>;
 } {
 	const autoInputs: InputItem[] = [];
 	const fixedInputsByPage = new Map<string, PagedAtlasGroup>();
 	const standaloneGroups = new Map<string, StandaloneAtlasGroup>();
-	const reservedPageIndexes = new Set<number>();
+	const reservedPageIndexesByBranch = new Map<number, Set<number>>();
 	const discoveredBranchNames = [
 		...new Set(inputs.map((input) => getInputBranchName(input)).filter((branchName) => !!branchName)),
 	];
@@ -1312,6 +1337,11 @@ function groupStandaloneInputs(
 			continue;
 		}
 		if (mode.kind === 'page') {
+			let reservedPageIndexes = reservedPageIndexesByBranch.get(branchOrdinal);
+			if (!reservedPageIndexes) {
+				reservedPageIndexes = new Set();
+				reservedPageIndexesByBranch.set(branchOrdinal, reservedPageIndexes);
+			}
 			reservedPageIndexes.add(mode.pageIndex);
 			const key = `${branchName}\u0000${mode.pageIndex}`;
 			const existing = fixedInputsByPage.get(key);
@@ -1340,7 +1370,8 @@ function groupStandaloneInputs(
 				left.branchOrdinal - right.branchOrdinal ||
 				getPublishedItemId(left.resource).localeCompare(getPublishedItemId(right.resource)),
 		),
-		reservedPageIndexes,
+		reservedPageIndexesByBranch,
+		branchOrdinalByName,
 	};
 }
 

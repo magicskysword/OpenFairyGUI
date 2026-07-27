@@ -225,6 +225,78 @@ test('atlas: trimImage keeps fully transparent images as zero-sized sprites', as
 	}
 });
 
+test('atlas: multi-page auto output skips every fixed page index', async (t) => {
+	const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'openfairygui-atlas-reserved-pages-'));
+	const imageDir = path.join(tmpDir, 'MixedPages', 'images');
+
+	try {
+		await fs.mkdir(imageDir, { recursive: true });
+		const doc = new Document();
+		const pkg = doc.createPackage('MixedPages');
+		pkg.setId('mixedpages01');
+
+		for (const [index, textureSetMode] of [
+			[0, ''],
+			[1, ''],
+			[2, ''],
+			[3, '1'],
+			[4, '2'],
+		] as const) {
+			const name = `image${index}`;
+			const fileName = `${name}.png`;
+			await sharp({
+				create: {
+					width: 48,
+					height: 48,
+					channels: 4,
+					background: { r: 30 + index * 20, g: 80, b: 160, alpha: 1 },
+				},
+			}).png().toFile(path.join(imageDir, fileName));
+			const resource = doc.createImageResource(name);
+			resource
+				.setId(`image0${index}`)
+				.setPath('/images/')
+				.setWidth(48)
+				.setHeight(48)
+				.setExported(true);
+			if (textureSetMode) resource.setTextureSetMode(textureSetMode);
+			resource.setExtras({ ...resource.getExtras(), _fileName: fileName });
+			pkg.addResource(resource);
+		}
+
+		await doc.transform(atlas({
+			encoder: sharp,
+			basePath: tmpDir,
+			outputPath: tmpDir,
+			mkdir: async (dir) => {
+				await fs.mkdir(dir, { recursive: true });
+			},
+			allowRotation: false,
+			padding: 0,
+			powerOfTwo: false,
+			maxSize: 64,
+		}));
+
+		const atlasFiles = pkg.listAtlases().map((atlasNode) => atlasNode.getFile()).sort();
+		const atlasIndexes = pkg.listAtlases().map((atlasNode) => atlasNode.getIndex()).sort((a, b) => a - b);
+		t.deepEqual(
+			atlasFiles,
+			[
+				'MixedPages_atlas0.png',
+				'MixedPages_atlas1.png',
+				'MixedPages_atlas2.png',
+				'MixedPages_atlas3.png',
+				'MixedPages_atlas4.png',
+			],
+		);
+		t.deepEqual(atlasIndexes, [0, 1, 2, 3, 4]);
+		t.is(new Set(atlasFiles).size, atlasFiles.length, 'every generated artifact file name is unique');
+		t.is(new Set(atlasIndexes).size, atlasIndexes.length, 'every runtime atlas index is unique');
+	} finally {
+		await fs.rm(tmpDir, { recursive: true, force: true });
+	}
+});
+
 test('atlas: rasterizes declared-size SVGs before trim and composite', async (t) => {
 	const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'openfairygui-atlas-svg-'));
 	const imageDir = path.join(tmpDir, 'Icons', 'images');
