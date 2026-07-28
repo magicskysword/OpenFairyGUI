@@ -1,6 +1,6 @@
 {
 	"name": "@magicskysword/openfairygui-functions",
-	"version": "0.2.4",
+	"version": "0.2.5",
 	"description": "FairyGUI Headless Authoring SDK — composable transform functions.",
 	"author": "OpenFairyGUI Contributors",
 	"license": "MIT",
@@ -77,7 +77,7 @@
 		"publish"
 	],
 	"dependencies": {
-		"@magicskysword/openfairygui-core": "^0.2.4",
+		"@magicskysword/openfairygui-core": "^0.2.5",
 		"jiti": "^2.6.1"
 	},
 	"devDependencies": {
