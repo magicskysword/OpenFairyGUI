@@ -817,6 +817,12 @@ export interface ProjectWriteOptions {
 	 * arbitrary filesystem paths are deliberately not accepted.
 	 */
 	staleSourceFiles?: readonly ProjectSourceFile[];
+	/**
+	 * Project-relative logical paths of model-owned XML/JSON files to write.
+	 * Paths always use `/`. When omitted, the complete project is written.
+	 * Targeted writes never emit resource payloads or remove stale files.
+	 */
+	targetPaths?: readonly string[];
 }
 
 /** Identifies one package-controlled file without exposing a filesystem path. */
@@ -825,6 +831,50 @@ export interface ProjectSourceFile {
 	branch: string;
 	path: string;
 	fileName: string;
+}
+
+export interface ProjectOutputProducer {
+	kind: 'package-descriptor' | 'component' | 'resource';
+	packageId: string;
+	packageName: string;
+	branch: string;
+	resourceId?: string;
+	resourceType?: string;
+	resourceName?: string;
+	resourcePath?: string;
+}
+
+function outputProducerLabel(producer: ProjectOutputProducer): string {
+	if (producer.kind === 'package-descriptor') return 'package descriptor';
+	return `resource "${producer.resourceId || producer.resourceName || 'unknown'}"`;
+}
+
+export class ProjectOutputConflictError extends Error {
+	readonly code = 'PROJECT_OUTPUT_CONFLICT';
+	readonly packageId: string;
+	readonly packageName: string;
+	readonly outputPath: string;
+	readonly first: ProjectOutputProducer;
+	readonly conflicting: ProjectOutputProducer;
+
+	constructor(
+		packageId: string,
+		packageName: string,
+		outputPath: string,
+		first: ProjectOutputProducer,
+		conflicting: ProjectOutputProducer,
+	) {
+		super(
+			`Package "${packageName}" output "${outputPath}" conflicts with ${outputProducerLabel(first)}; `
+				+ `conflicting producer is ${outputProducerLabel(conflicting)}.`,
+		);
+		this.name = 'ProjectOutputConflictError';
+		this.packageId = packageId;
+		this.packageName = packageName;
+		this.outputPath = outputPath;
+		this.first = first;
+		this.conflicting = conflicting;
+	}
 }
 
 export class ProjectWriter {
@@ -839,31 +889,37 @@ export class ProjectWriter {
 		const root = doc.getRoot();
 		const basePath = fs.dirname(projectPath);
 		const currentSourceFilePaths = new Set<string>();
+		const targetPaths = options.targetPaths === undefined
+			? undefined
+			: new Set(options.targetPaths.map((target) => this._normalizeSourceRelativePath(target)));
 		const staleSourceFilePaths = new Set(
 			(options.staleSourceFiles ?? []).map((source) => this._projectSourceFilePath(basePath, source)),
 		);
-		for (const pkg of root.listPackages()) this._assertPackageOutputTargets(pkg);
+		for (const pkg of root.listPackages()) this._assertPackageOutputTargets(pkg, targetPaths);
 
 		// 1. Write .fairy file
-		const generatedFairyXml = `<?xml version="1.0" encoding="utf-8"?>\n`
-			+ `<projectDescription id="${root.getProjectId()}" type="${this._projectTypeName(root.getProjectType())}" version="${root.getVersion() || '3.0'}"/>\n`;
-		const sourceFairyXml = root.getExtras()._sourceProjectXml;
-		const fairyXml = typeof sourceFairyXml === 'string'
-			? preserveOpaqueProjectXml('project', sourceFairyXml, generatedFairyXml)
-			: generatedFairyXml;
-		await fs.writeFile(projectPath, fairyXml);
+		if (this._shouldWriteTarget(targetPaths, 'project.fairy')) {
+			const generatedFairyXml = `<?xml version="1.0" encoding="utf-8"?>\n`
+				+ `<projectDescription id="${root.getProjectId()}" type="${this._projectTypeName(root.getProjectType())}" version="${root.getVersion() || '3.0'}"/>\n`;
+			const sourceFairyXml = root.getExtras()._sourceProjectXml;
+			const fairyXml = typeof sourceFairyXml === 'string'
+				? preserveOpaqueProjectXml('project', sourceFairyXml, generatedFairyXml)
+				: generatedFairyXml;
+			await fs.writeFile(projectPath, fairyXml);
+		}
 
 		// 2. Write settings
 		const settings = root.getSettings?.() ?? {};
 		const settingsPath = fs.join(basePath, 'settings');
-		await fs.mkdir(settingsPath);
 		const settingFiles: Record<string, string> = {
 			'Publish.json': 'publish',
 			'Common.json': 'common',
 			'Adaptation.json': 'adaptation',
 		};
 		for (const [fileName, key] of Object.entries(settingFiles)) {
-			if (settings[key]) {
+			const relativePath = `settings/${fileName}`;
+			if (settings[key] && this._shouldWriteTarget(targetPaths, relativePath)) {
+				await fs.mkdir(settingsPath);
 				await fs.writeFile(
 					fs.join(settingsPath, fileName),
 					JSON.stringify(settings[key], null, '\t'),
@@ -873,12 +929,14 @@ export class ProjectWriter {
 
 		// 3. Write packages
 		const assetsPath = fs.join(basePath, 'assets');
-		await fs.mkdir(assetsPath);
+		if (targetPaths === undefined) await fs.mkdir(assetsPath);
 		for (const pkg of root.listPackages()) {
-			await this._writePackage(doc, pkg, assetsPath, currentSourceFilePaths);
+			await this._writePackage(doc, pkg, assetsPath, currentSourceFilePaths, targetPaths);
 		}
 
-		await this._removeStaleSourceFiles(currentSourceFilePaths, staleSourceFilePaths);
+		if (targetPaths === undefined) {
+			await this._removeStaleSourceFiles(currentSourceFilePaths, staleSourceFilePaths);
+		}
 	}
 
 	private async _writePackage(
@@ -886,11 +944,11 @@ export class ProjectWriter {
 		pkg: Package,
 		assetsPath: string,
 		currentSourceFilePaths: Set<string>,
+		targetPaths?: ReadonlySet<string>,
 	): Promise<void> {
 		const fs = this._fs;
 		this._assertSafePathSegment(pkg.getName(), 'package name');
 		const pkgDir = fs.join(assetsPath, pkg.getName());
-		await fs.mkdir(pkgDir);
 		const basePath = fs.dirname(assetsPath);
 		const resourcesByBranch = new Map<string, PackageResource[]>();
 		for (const res of pkg.listResources()) {
@@ -965,15 +1023,22 @@ export class ProjectWriter {
 			? preserveOpaqueProjectXml('package', sourceXmlByBranch[''], generatedPackageXml)
 			: generatedPackageXml;
 		const packageDescriptorPath = fs.join(pkgDir, 'package.xml');
-		await fs.writeFile(packageDescriptorPath, packageXml);
-		currentSourceFilePaths.add(packageDescriptorPath);
+		if (this._shouldWriteTarget(targetPaths, `assets/${pkg.getName()}/package.xml`)) {
+			await fs.mkdir(pkgDir);
+			await fs.writeFile(packageDescriptorPath, packageXml);
+			currentSourceFilePaths.add(packageDescriptorPath);
+		}
 
 		// Write main-branch component XML files
 		for (const comp of mainResources.filter((resource): resource is Component => resource.propertyType === 'Component')) {
-			currentSourceFilePaths.add(fs.join(pkgDir, this._componentSourceRelativePath(comp)));
+			const componentRelativePath = this._componentSourceRelativePath(comp);
+			if (!this._shouldWriteTarget(targetPaths, `assets/${pkg.getName()}/${componentRelativePath}`)) continue;
+			currentSourceFilePaths.add(fs.join(pkgDir, componentRelativePath));
 			await this._writeComponent(comp, pkgDir);
 		}
-		await this._writeResourceSourceFiles(mainResources, pkgDir, currentSourceFilePaths);
+		if (targetPaths === undefined) {
+			await this._writeResourceSourceFiles(mainResources, pkgDir, currentSourceFilePaths);
+		}
 
 		for (const [branchName, branchResources] of resourcesByBranch) {
 			if (!branchName) continue;
@@ -985,14 +1050,22 @@ export class ProjectWriter {
 				? preserveOpaqueProjectXml('branch', sourceXmlByBranch[branchName], generatedBranchXml)
 				: generatedBranchXml;
 			const branchDescriptorPath = fs.join(branchPkgDir, 'package_branch.xml');
-			await fs.writeFile(branchDescriptorPath, branchXml);
-			currentSourceFilePaths.add(branchDescriptorPath);
+			const branchRoot = `assets_${branchName}/${pkg.getName()}`;
+			if (this._shouldWriteTarget(targetPaths, `${branchRoot}/package_branch.xml`)) {
+				await fs.mkdir(branchPkgDir);
+				await fs.writeFile(branchDescriptorPath, branchXml);
+				currentSourceFilePaths.add(branchDescriptorPath);
+			}
 
 			for (const comp of branchResources.filter((resource): resource is Component => resource.propertyType === 'Component')) {
-				currentSourceFilePaths.add(fs.join(branchPkgDir, this._componentSourceRelativePath(comp)));
+				const componentRelativePath = this._componentSourceRelativePath(comp);
+				if (!this._shouldWriteTarget(targetPaths, `${branchRoot}/${componentRelativePath}`)) continue;
+				currentSourceFilePaths.add(fs.join(branchPkgDir, componentRelativePath));
 				await this._writeComponent(comp, branchPkgDir);
 			}
-			await this._writeResourceSourceFiles(branchResources, branchPkgDir, currentSourceFilePaths);
+			if (targetPaths === undefined) {
+				await this._writeResourceSourceFiles(branchResources, branchPkgDir, currentSourceFilePaths);
+			}
 		}
 	}
 
@@ -1035,7 +1108,7 @@ export class ProjectWriter {
 		}
 	}
 
-	private _assertPackageOutputTargets(pkg: Package): void {
+	private _assertPackageOutputTargets(pkg: Package, targetPaths?: ReadonlySet<string>): void {
 		this._assertSafePathSegment(pkg.getName(), 'package name');
 		const resourcesByBranch = new Map<string, PackageResource[]>();
 		for (const resource of pkg.listResources()) {
@@ -1048,7 +1121,13 @@ export class ProjectWriter {
 		for (const [branchName, resources] of resourcesByBranch) {
 			if (branchName) this._assertSafePathSegment(branchName, 'branch name');
 			const descriptorName = branchName ? 'package_branch.xml' : 'package.xml';
-			const targets = new Map<string, string>([[descriptorName, 'package descriptor']]);
+			const descriptorProducer: ProjectOutputProducer = {
+				kind: 'package-descriptor',
+				packageId: pkg.getId(),
+				packageName: pkg.getName(),
+				branch: branchName,
+			};
+			const targets = new Map<string, ProjectOutputProducer>([[descriptorName, descriptorProducer]]);
 			for (const resource of resources) {
 				const target = resource.propertyType === 'Component'
 					? this._componentSourceRelativePath(resource as Component)
@@ -1056,11 +1135,45 @@ export class ProjectWriter {
 				if (!target) continue;
 				const previous = targets.get(target);
 				if (previous) {
-					throw new Error(`Package "${pkg.getName()}" output "${target}" conflicts with ${previous}.`);
+					const assetRoot = branchName ? `assets_${branchName}` : 'assets';
+					const logicalPath = `${assetRoot}/${pkg.getName()}/${target}`;
+					if (this._shouldWriteTarget(targetPaths, logicalPath)) {
+						throw new ProjectOutputConflictError(
+							pkg.getId(),
+							pkg.getName(),
+							target,
+							previous,
+							this._resourceOutputProducer(pkg, resource, branchName),
+						);
+					}
 				}
-				targets.set(target, `resource "${(resource as WritableResource).getId?.() ?? resource.getName()}"`);
+				else {
+					targets.set(target, this._resourceOutputProducer(pkg, resource, branchName));
+				}
 			}
 		}
+	}
+
+	private _resourceOutputProducer(
+		pkg: Package,
+		resource: PackageResource,
+		branch: string,
+	): ProjectOutputProducer {
+		const writable = resource as WritableResource;
+		return {
+			kind: resource.propertyType === 'Component' ? 'component' : 'resource',
+			packageId: pkg.getId(),
+			packageName: pkg.getName(),
+			branch,
+			resourceId: writable.getId?.() ?? '',
+			resourceType: resource.propertyType as string,
+			resourceName: resource.getName(),
+			resourcePath: writable.getPath?.() ?? '/',
+		};
+	}
+
+	private _shouldWriteTarget(targetPaths: ReadonlySet<string> | undefined, relativePath: string): boolean {
+		return targetPaths === undefined || targetPaths.has(this._normalizeSourceRelativePath(relativePath));
 	}
 
 	private _projectSourceFilePath(basePath: string, source: ProjectSourceFile): string {

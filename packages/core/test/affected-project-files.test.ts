@@ -36,6 +36,24 @@ function createDocument(): Document {
 	return doc;
 }
 
+function addUnrelatedImageOutputConflict(doc: Document): void {
+	const pkg = doc.getRoot().getPackageById('second01');
+	if (!pkg) throw new Error('missing Second package');
+
+	pkg.addResource(
+		doc.createImageResource('CollisionFirst')
+			.setId('image-a')
+			.setFileName('collision.png')
+			.setPath('/images/'),
+	);
+	pkg.addResource(
+		doc.createImageResource('CollisionSecond')
+			.setId('image-b')
+			.setFileName('collision.png')
+			.setPath('/images/'),
+	);
+}
+
 test('serializeProjectFiles emits logical POSIX paths without touching disk', async (t) => {
 	const files = await serializeProjectFiles(createDocument());
 	const paths = files.map((file) => file.relativePath);
@@ -63,6 +81,95 @@ test('serializeAffectedProjectFiles returns only requested complete files', asyn
 	);
 	t.regex(files[0]?.content ?? '', /text="first"/);
 	t.regex(files[1]?.content ?? '', /id="second01"/);
+});
+
+test('serializeAffectedProjectFiles ignores output conflicts unrelated to requested files', async (t) => {
+	const doc = createDocument();
+	addUnrelatedImageOutputConflict(doc);
+
+	const files = await serializeAffectedProjectFiles(doc, [
+		{ kind: 'component', packageId: 'first001', componentId: 'main1' },
+	]);
+
+	t.deepEqual(files.map((file) => file.relativePath), [
+		'assets/First/views/Main.xml',
+	]);
+	t.regex(files[0]?.content ?? '', /text="first"/);
+});
+
+test('serializeProjectFiles reports both producers for a complete-project output conflict', async (t) => {
+	const doc = createDocument();
+	addUnrelatedImageOutputConflict(doc);
+
+	const error = await t.throwsAsync(() => serializeProjectFiles(doc)) as Error & {
+		code?: string;
+		packageId?: string;
+		packageName?: string;
+		outputPath?: string;
+		first?: Record<string, unknown>;
+		conflicting?: Record<string, unknown>;
+	};
+
+	t.is(error.code, 'PROJECT_OUTPUT_CONFLICT');
+	t.is(error.packageId, 'second01');
+	t.is(error.packageName, 'Second');
+	t.is(error.outputPath, 'images/collision.png');
+	t.like(error.first, {
+		kind: 'resource',
+		resourceId: 'image-a',
+		resourceType: 'ImageResource',
+		resourceName: 'CollisionFirst',
+		resourcePath: '/images/',
+	});
+	t.like(error.conflicting, {
+		kind: 'resource',
+		resourceId: 'image-b',
+		resourceType: 'ImageResource',
+		resourceName: 'CollisionSecond',
+		resourcePath: '/images/',
+	});
+});
+
+test('serializeAffectedProjectFiles rejects a requested component whose own output is ambiguous', async (t) => {
+	const doc = createDocument();
+	const pkg = doc.getRoot().getPackageById('second01');
+	if (!pkg) throw new Error('missing Second package');
+	pkg.addResource(
+		doc.createComponent('Duplicate')
+			.setId('dup-a')
+			.setPath('/views/'),
+	);
+	pkg.addResource(
+		doc.createComponent('Duplicate')
+			.setId('dup-b')
+			.setPath('/views/'),
+	);
+
+	const error = await t.throwsAsync(() => serializeAffectedProjectFiles(doc, [
+		{ kind: 'component', packageId: 'second01', componentId: 'dup-a' },
+	])) as Error & {
+		code?: string;
+		outputPath?: string;
+		first?: Record<string, unknown>;
+		conflicting?: Record<string, unknown>;
+	};
+
+	t.is(error.code, 'PROJECT_OUTPUT_CONFLICT');
+	t.is(error.outputPath, 'views/Duplicate.xml');
+	t.like(error.first, {
+		kind: 'component',
+		resourceId: 'dup-a',
+		resourceType: 'Component',
+		resourceName: 'Duplicate',
+		resourcePath: '/views/',
+	});
+	t.like(error.conflicting, {
+		kind: 'component',
+		resourceId: 'dup-b',
+		resourceType: 'Component',
+		resourceName: 'Duplicate',
+		resourcePath: '/views/',
+	});
 });
 
 test('serializeAffectedProjectFiles deduplicates identical targets in caller order', async (t) => {

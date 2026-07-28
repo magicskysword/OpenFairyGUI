@@ -172,10 +172,15 @@ function describeProjectFiles(doc: Document): SerializedProjectFile[] {
 	return files;
 }
 
-async function captureProjectFiles(doc: Document): Promise<Map<string, string>> {
+async function captureProjectFiles(
+	doc: Document,
+	targetPaths?: readonly string[],
+): Promise<Map<string, string>> {
 	const capture = new CaptureFileSystem();
 	const writer = new ProjectWriter(capture);
-	await writer.write(doc, VIRTUAL_PROJECT_PATH);
+	await writer.write(doc, VIRTUAL_PROJECT_PATH, targetPaths === undefined
+		? {}
+		: { targetPaths });
 	return new Map(
 		Array.from(capture.files, ([filePath, content]) => [relativeLogicalPath(filePath), content]),
 	);
@@ -262,7 +267,10 @@ export async function serializeAffectedProjectFiles(
 		selected.push(descriptor);
 	}
 
-	const captured = await captureProjectFiles(doc);
+	const captured = await captureProjectFiles(
+		doc,
+		selected.map((descriptor) => descriptor.relativePath),
+	);
 	return selected.map((descriptor) => {
 		const content = captured.get(descriptor.relativePath);
 		if (content === undefined) {

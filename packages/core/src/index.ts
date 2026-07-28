@@ -240,6 +240,7 @@ export {
 	PlatformIO,
 	ProjectReader,
 	ProjectWriter,
+	ProjectOutputConflictError,
 	BinaryReader,
 	BinaryWriter,
 	inferHighResolutionItemIds,
@@ -257,6 +258,7 @@ export {
 	type SerializedProjectFileKind,
 	type ProjectFileTarget,
 	type ProjectReadOptions,
+	type ProjectOutputProducer,
 	type ProjectSourceFile,
 	type ProjectWriteOptions,
 } from './io/index.js';
