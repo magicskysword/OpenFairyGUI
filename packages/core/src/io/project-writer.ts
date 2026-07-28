@@ -10,6 +10,17 @@ import { ControllerActionType, GearType, TransitionActionType } from '../constan
 import type { FileSystem } from './project-reader.js';
 import { PROJECT_XML_PROTOCOL, writeXmlAttr, type XmlNodeProtocol } from './project-xml-protocol.js';
 import { preserveOpaqueProjectXml } from './opaque-project-xml.js';
+import {
+	inspectPackageOutputConflicts,
+	projectResourceFileName,
+	ProjectOutputConflictError,
+} from './project-output-conflicts.js';
+
+export { ProjectOutputConflictError } from './project-output-conflicts.js';
+export type {
+	ProjectOutputConflict,
+	ProjectOutputProducer,
+} from './project-output-conflicts.js';
 
 const builder = new XMLBuilder({
 	ignoreAttributes: false,
@@ -833,50 +844,6 @@ export interface ProjectSourceFile {
 	fileName: string;
 }
 
-export interface ProjectOutputProducer {
-	kind: 'package-descriptor' | 'component' | 'resource';
-	packageId: string;
-	packageName: string;
-	branch: string;
-	resourceId?: string;
-	resourceType?: string;
-	resourceName?: string;
-	resourcePath?: string;
-}
-
-function outputProducerLabel(producer: ProjectOutputProducer): string {
-	if (producer.kind === 'package-descriptor') return 'package descriptor';
-	return `resource "${producer.resourceId || producer.resourceName || 'unknown'}"`;
-}
-
-export class ProjectOutputConflictError extends Error {
-	readonly code = 'PROJECT_OUTPUT_CONFLICT';
-	readonly packageId: string;
-	readonly packageName: string;
-	readonly outputPath: string;
-	readonly first: ProjectOutputProducer;
-	readonly conflicting: ProjectOutputProducer;
-
-	constructor(
-		packageId: string,
-		packageName: string,
-		outputPath: string,
-		first: ProjectOutputProducer,
-		conflicting: ProjectOutputProducer,
-	) {
-		super(
-			`Package "${packageName}" output "${outputPath}" conflicts with ${outputProducerLabel(first)}; `
-				+ `conflicting producer is ${outputProducerLabel(conflicting)}.`,
-		);
-		this.name = 'ProjectOutputConflictError';
-		this.packageId = packageId;
-		this.packageName = packageName;
-		this.outputPath = outputPath;
-		this.first = first;
-		this.conflicting = conflicting;
-	}
-}
-
 export class ProjectWriter {
 	private readonly _fs: FileSystem;
 
@@ -1109,67 +1076,13 @@ export class ProjectWriter {
 	}
 
 	private _assertPackageOutputTargets(pkg: Package, targetPaths?: ReadonlySet<string>): void {
-		this._assertSafePathSegment(pkg.getName(), 'package name');
-		const resourcesByBranch = new Map<string, PackageResource[]>();
-		for (const resource of pkg.listResources()) {
-			const branchName = (resource as WritableResource).getBranch?.() ?? '';
-			const bucket = resourcesByBranch.get(branchName) ?? [];
-			bucket.push(resource);
-			resourcesByBranch.set(branchName, bucket);
-		}
-
-		for (const [branchName, resources] of resourcesByBranch) {
-			if (branchName) this._assertSafePathSegment(branchName, 'branch name');
-			const descriptorName = branchName ? 'package_branch.xml' : 'package.xml';
-			const descriptorProducer: ProjectOutputProducer = {
-				kind: 'package-descriptor',
-				packageId: pkg.getId(),
-				packageName: pkg.getName(),
-				branch: branchName,
-			};
-			const targets = new Map<string, ProjectOutputProducer>([[descriptorName, descriptorProducer]]);
-			for (const resource of resources) {
-				const target = resource.propertyType === 'Component'
-					? this._componentSourceRelativePath(resource as Component)
-					: this._resourceSourceRelativePath(resource as WritableResource, this._resourceFileName(resource as WritableResource));
-				if (!target) continue;
-				const previous = targets.get(target);
-				if (previous) {
-					const assetRoot = branchName ? `assets_${branchName}` : 'assets';
-					const logicalPath = `${assetRoot}/${pkg.getName()}/${target}`;
-					if (this._shouldWriteTarget(targetPaths, logicalPath)) {
-						throw new ProjectOutputConflictError(
-							pkg.getId(),
-							pkg.getName(),
-							target,
-							previous,
-							this._resourceOutputProducer(pkg, resource, branchName),
-						);
-					}
-				}
-				else {
-					targets.set(target, this._resourceOutputProducer(pkg, resource, branchName));
-				}
+		for (const conflict of inspectPackageOutputConflicts(pkg)) {
+			const assetRoot = conflict.branch ? `assets_${conflict.branch}` : 'assets';
+			const logicalPath = `${assetRoot}/${pkg.getName()}/${conflict.outputPath}`;
+			if (this._shouldWriteTarget(targetPaths, logicalPath)) {
+				throw new ProjectOutputConflictError(conflict);
 			}
 		}
-	}
-
-	private _resourceOutputProducer(
-		pkg: Package,
-		resource: PackageResource,
-		branch: string,
-	): ProjectOutputProducer {
-		const writable = resource as WritableResource;
-		return {
-			kind: resource.propertyType === 'Component' ? 'component' : 'resource',
-			packageId: pkg.getId(),
-			packageName: pkg.getName(),
-			branch,
-			resourceId: writable.getId?.() ?? '',
-			resourceType: resource.propertyType as string,
-			resourceName: resource.getName(),
-			resourcePath: writable.getPath?.() ?? '/',
-		};
 	}
 
 	private _shouldWriteTarget(targetPaths: ReadonlySet<string> | undefined, relativePath: string): boolean {
@@ -2307,28 +2220,7 @@ export class ProjectWriter {
 	}
 
 	private _resourceFileName(res: WritableResource): string {
-		const name = res.getName?.() ?? '';
-		const type = res.propertyType as string;
-		if (type === 'Component') return name + '.xml';
-		if (type === 'ImageResource') {
-			const fileName = (res as WritableImageResource).getFileName?.() ?? '';
-			if (fileName) return fileName;
-		}
-		if (type === 'SoundResource' || type === 'MiscResource' || type === 'SpineResource' || type === 'DragonBonesResource') {
-			const fileName = (res as WritableFileResource).getFile?.() ?? '';
-			if (fileName) return fileName;
-		}
-		if (type === 'FontResource') {
-			const fileName = (res as WritableFontResource).getFileName?.() ?? '';
-			if (fileName) return fileName;
-		}
-		if (type === 'MovieClipResource') {
-			const fileName = (res as WritableMovieClipResource).getFileName?.() ?? '';
-			if (fileName) return fileName;
-			return `${name}.jta`;
-		}
-		// For other types the name usually includes the extension already (stored from original)
-		return name;
+		return projectResourceFileName(res);
 	}
 
 	private _projectTypeName(type: number): string {

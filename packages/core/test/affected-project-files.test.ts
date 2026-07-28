@@ -1,6 +1,7 @@
 import test from 'ava';
 import {
 	Document,
+	inspectProjectOutputConflicts,
 	serializeAffectedProjectFiles,
 	serializeProjectFiles,
 } from '../src/index.js';
@@ -128,6 +129,78 @@ test('serializeProjectFiles reports both producers for a complete-project output
 		resourceName: 'CollisionSecond',
 		resourcePath: '/images/',
 	});
+});
+
+test('inspectProjectOutputConflicts returns every producer pair without throwing', (t) => {
+	const doc = createDocument();
+	addUnrelatedImageOutputConflict(doc);
+	const pkg = doc.getRoot().getPackageById('second01');
+	if (!pkg) throw new Error('missing Second package');
+	pkg.addResource(
+		doc.createComponent('Duplicate')
+			.setId('dup-a')
+			.setPath('/views/'),
+	);
+	pkg.addResource(
+		doc.createComponent('Duplicate')
+			.setId('dup-b')
+			.setPath('/views/'),
+	);
+
+	t.deepEqual(inspectProjectOutputConflicts(doc), [
+		{
+			packageId: 'second01',
+			packageName: 'Second',
+			branch: '',
+			outputPath: 'images/collision.png',
+			first: {
+				kind: 'resource',
+				packageId: 'second01',
+				packageName: 'Second',
+				branch: '',
+				resourceId: 'image-a',
+				resourceType: 'ImageResource',
+				resourceName: 'CollisionFirst',
+				resourcePath: '/images/',
+			},
+			conflicting: {
+				kind: 'resource',
+				packageId: 'second01',
+				packageName: 'Second',
+				branch: '',
+				resourceId: 'image-b',
+				resourceType: 'ImageResource',
+				resourceName: 'CollisionSecond',
+				resourcePath: '/images/',
+			},
+		},
+		{
+			packageId: 'second01',
+			packageName: 'Second',
+			branch: '',
+			outputPath: 'views/Duplicate.xml',
+			first: {
+				kind: 'component',
+				packageId: 'second01',
+				packageName: 'Second',
+				branch: '',
+				resourceId: 'dup-a',
+				resourceType: 'Component',
+				resourceName: 'Duplicate',
+				resourcePath: '/views/',
+			},
+			conflicting: {
+				kind: 'component',
+				packageId: 'second01',
+				packageName: 'Second',
+				branch: '',
+				resourceId: 'dup-b',
+				resourceType: 'Component',
+				resourceName: 'Duplicate',
+				resourcePath: '/views/',
+			},
+		},
+	]);
 });
 
 test('serializeAffectedProjectFiles rejects a requested component whose own output is ambiguous', async (t) => {
