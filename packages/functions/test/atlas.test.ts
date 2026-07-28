@@ -483,3 +483,88 @@ test('atlas: standalone textureSetMode and fixed page outputs use editor-style f
 		await fs.rm(tmpDir, { recursive: true, force: true });
 	}
 });
+
+test('atlas: explicit resource mode overrides the nearest inherited folder mode', async (t) => {
+	const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'openfairygui-atlas-folder-modes-'));
+	const imageDir = path.join(tmpDir, 'FolderModes', 'images');
+	try {
+		await fs.mkdir(imageDir, { recursive: true });
+		for (const [fileName, color] of [
+			['standalone.png', { r: 180, g: 40, b: 40, alpha: 1 }],
+			['auto.png', { r: 40, g: 180, b: 40, alpha: 1 }],
+			['fixed.png', { r: 40, g: 40, b: 180, alpha: 1 }],
+		] as const) {
+			await sharp({
+				create: {
+					width: 32,
+					height: 32,
+					channels: 4,
+					background: color,
+				},
+			}).png().toFile(path.join(imageDir, fileName));
+		}
+
+		const doc = new Document();
+		const pkg = doc.createPackage('FolderModes');
+		pkg.setId('foldermodes01');
+
+		const standalone = doc.createImageResource('standalone');
+		standalone
+			.setId('alone01')
+			.setPath('/images/')
+			.setFileName('standalone.png')
+			.setWidth(32)
+			.setHeight(32)
+			.setExported(true)
+			.setFolderTextureSetMode('alone_npot');
+		pkg.addResource(standalone);
+
+		const explicitAuto = doc.createImageResource('auto');
+		explicitAuto
+			.setId('auto001')
+			.setPath('/images/')
+			.setFileName('auto.png')
+			.setWidth(32)
+			.setHeight(32)
+			.setExported(true)
+			.setTextureSetMode('default')
+			.setFolderTextureSetMode('alone');
+		pkg.addResource(explicitAuto);
+
+		const fixed = doc.createImageResource('fixed');
+		fixed
+			.setId('fixed01')
+			.setPath('/images/')
+			.setFileName('fixed.png')
+			.setWidth(32)
+			.setHeight(32)
+			.setExported(true)
+			.setFolderTextureSetMode('1');
+		pkg.addResource(fixed);
+
+		await doc.transform(atlas({
+			encoder: sharp,
+			basePath: tmpDir,
+			outputPath: tmpDir,
+			mkdir: async (dir) => {
+				await fs.mkdir(dir, { recursive: true });
+			},
+			maxSize: 128,
+		}));
+
+		const atlasFiles = pkg.listAtlases().map((atlasNode) => atlasNode.getFile()).sort();
+		t.deepEqual(atlasFiles, [
+			'FolderModes_atlas0.png',
+			'FolderModes_atlas1.png',
+			'FolderModes_atlas_alone01.png',
+		]);
+		const standaloneAtlas = pkg.listAtlases().find((atlasNode) => atlasNode.getFile().includes('alone01'));
+		t.deepEqual(
+			standaloneAtlas?.listSprites().map((sprite) => sprite.getItemId()),
+			['alone01'],
+			'inherited standalone mode applies only when the resource has no explicit mode',
+		);
+	} finally {
+		await fs.rm(tmpDir, { recursive: true, force: true });
+	}
+});

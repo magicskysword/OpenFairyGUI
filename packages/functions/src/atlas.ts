@@ -1271,10 +1271,8 @@ interface ExtractedJtaData {
 }
 
 function getResourceTextureSetMode(resource: PackInputResource): TextureSetMode {
-	if (isImageResource(resource)) {
-		return parseTextureSetMode(resource.getTextureSetMode?.());
-	}
-	return parseTextureSetMode(resource.getTextureSetMode?.());
+	const explicitMode = resource.getTextureSetMode?.().trim();
+	return parseTextureSetMode(explicitMode || resource.getFolderTextureSetMode?.());
 }
 
 function groupStandaloneInputs(

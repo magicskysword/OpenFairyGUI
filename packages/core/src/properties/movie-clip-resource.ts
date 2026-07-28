@@ -13,6 +13,7 @@ interface IMovieClipResource extends IExtensibleProperty {
 	fileName: string;
 	exported: boolean;
 	textureSetMode: string;
+	folderTextureSetMode: string;
 	width: number;
 	height: number;
 	interval: number;
@@ -44,6 +45,7 @@ export class MovieClipResource extends ExtensibleProperty<IMovieClipResource> {
 			fileName: '',
 			exported: false,
 			textureSetMode: '',
+			folderTextureSetMode: '',
 			width: 0,
 			height: 0,
 			interval: 0,
@@ -78,6 +80,9 @@ export class MovieClipResource extends ExtensibleProperty<IMovieClipResource> {
 
 	public getTextureSetMode(): string { return this.get('textureSetMode'); }
 	public setTextureSetMode(v: string): this { return this.set('textureSetMode', v); }
+
+	public getFolderTextureSetMode(): string { return this.get('folderTextureSetMode'); }
+	public setFolderTextureSetMode(v: string): this { return this.set('folderTextureSetMode', v); }
 
 	public getWidth(): number { return this.get('width'); }
 	public setWidth(v: number): this { return this.set('width', v); }

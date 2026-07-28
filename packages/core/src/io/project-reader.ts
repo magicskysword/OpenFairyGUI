@@ -199,6 +199,7 @@ interface ResourceXmlAttrs extends XmlNode {
 	name?: string;
 	path?: string;
 	exported?: string | boolean;
+	atlas?: string;
 	scale?: string;
 	scale9grid?: string;
 	smoothing?: string | boolean;
@@ -549,10 +550,13 @@ function escapeRegExp(value: string): string {
 
 function getOrderedPackageResourceItems(xmlContent: string): Array<{ tagName: string; attrs: ResourceXmlAttrs }> {
 	const ordered = parseXMLPreserveOrder(xmlContent);
-	const packageEntry = ordered.find((entry) => 'packageDescription' in entry);
+	const packageEntry = ordered.find(
+		(entry) => 'packageDescription' in entry || 'branchDescription' in entry,
+	);
 	if (!packageEntry) return [];
-	const packageChildren = Array.isArray(packageEntry.packageDescription)
-		? (packageEntry.packageDescription as OrderedXmlEntry[])
+	const rootName = 'packageDescription' in packageEntry ? 'packageDescription' : 'branchDescription';
+	const packageChildren = Array.isArray(packageEntry[rootName])
+		? (packageEntry[rootName] as OrderedXmlEntry[])
 		: [];
 	const resourcesEntry = packageChildren.find((entry) => 'resources' in entry);
 	if (!resourcesEntry) return [];
@@ -569,6 +573,49 @@ function getOrderedPackageResourceItems(xmlContent: string): Array<{ tagName: st
 			attrs: attrs as ResourceXmlAttrs,
 		}];
 	});
+}
+
+function normalizePackageFolderPath(value: string): string {
+	const segments = value
+		.replace(/\\/g, '/')
+		.split('/')
+		.map((segment) => segment.trim())
+		.filter(Boolean);
+	return segments.length > 0 ? `/${segments.join('/')}/` : '/';
+}
+
+function collectFolderTextureSetModes(
+	resources: Array<{ tagName: string; attrs: ResourceXmlAttrs }>,
+): Map<string, string> {
+	const modes = new Map<string, string>();
+	for (const { tagName, attrs } of resources) {
+		if (tagName.toLowerCase() !== 'folder') continue;
+		const mode = readXmlAttr<string>(attrs, PROJECT_XML_PROTOCOL.packageImageResource.attrs.atlas)?.trim();
+		if (!mode) continue;
+		const id = readXmlAttr<string>(attrs, PROJECT_XML_PROTOCOL.packageResource.attrs.id)?.trim() ?? '';
+		const name = readXmlAttr<string>(attrs, PROJECT_XML_PROTOCOL.packageResource.attrs.name)?.trim() ?? '';
+		const parentPath = readXmlAttr<string>(attrs, PROJECT_XML_PROTOCOL.packageResource.attrs.path)?.trim() ?? '/';
+		const folderPath = id.startsWith('/')
+			? normalizePackageFolderPath(id)
+			: normalizePackageFolderPath(`${parentPath}/${name}`);
+		modes.set(folderPath, mode);
+	}
+	return modes;
+}
+
+function resolveFolderTextureSetMode(
+	resourcePath: string,
+	modes: ReadonlyMap<string, string>,
+): string {
+	let currentPath = normalizePackageFolderPath(resourcePath);
+	while (true) {
+		const mode = modes.get(currentPath);
+		if (mode !== undefined) return mode;
+		if (currentPath === '/') return '';
+		const segments = currentPath.split('/').filter(Boolean);
+		segments.pop();
+		currentPath = segments.length > 0 ? `/${segments.join('/')}/` : '/';
+	}
 }
 
 function getXmlNode<T extends XmlNode>(value: unknown): T | null {
@@ -997,14 +1044,28 @@ export class ProjectReader {
 				pkg.setJpegQuality(parseInt2(jpegQuality, 0));
 			}
 		}
+		const orderedResources = getOrderedPackageResourceItems(content);
+		const declaredFolderTextureSetModes = collectFolderTextureSetModes(orderedResources);
 		const packageExtras = pkg.getExtras();
 		const sourceXmlByBranch = {
 			...(packageExtras._sourcePackageXmlByBranch as Record<string, string> | undefined),
 			[branchName]: content,
 		};
+		const folderTextureSetModesByBranch = {
+			...(packageExtras._folderTextureSetModesByBranch as Record<string, Record<string, string>> | undefined),
+		};
+		const inheritedFolderTextureSetModes = branchName
+			? folderTextureSetModesByBranch[''] ?? {}
+			: {};
+		const effectiveFolderTextureSetModes = new Map<string, string>([
+			...Object.entries(inheritedFolderTextureSetModes),
+			...declaredFolderTextureSetModes.entries(),
+		]);
+		folderTextureSetModesByBranch[branchName] = Object.fromEntries(effectiveFolderTextureSetModes);
 		pkg.setExtras({
 			...packageExtras,
 			_sourcePackageXmlByBranch: sourceXmlByBranch,
+			_folderTextureSetModesByBranch: folderTextureSetModesByBranch,
 		});
 
 		// Publish name
@@ -1043,11 +1104,13 @@ export class ProjectReader {
 			: fs.join(ctx.basePath, 'assets', dirName);
 
 		const createdResources: Array<ReturnType<Package['listResources']>[number]> = [];
-		const orderedResources = getOrderedPackageResourceItems(content);
 		if (orderedResources.length > 0) {
 			for (const { tagName, attrs } of orderedResources) {
 				const resource = this._createResourceFromXML(ctx, pkg, tagName, attrs, packageDir, branchName);
-				if (resource) createdResources.push(resource);
+				if (resource) {
+					this._applyFolderTextureSetMode(resource, effectiveFolderTextureSetModes);
+					createdResources.push(resource);
+				}
 			}
 			await this._hydratePackageImageSizes(createdResources, packageDir);
 			if (options.hydrateResourceBytes) {
@@ -1063,13 +1126,28 @@ export class ProjectReader {
 				const attrs = getXmlNode<ResourceXmlAttrs>(item);
 				if (!attrs) continue;
 				const resource = this._createResourceFromXML(ctx, pkg, tagName, attrs, packageDir, branchName);
-				if (resource) createdResources.push(resource);
+				if (resource) {
+					this._applyFolderTextureSetMode(resource, effectiveFolderTextureSetModes);
+					createdResources.push(resource);
+				}
 			}
 		}
 		await this._hydratePackageImageSizes(createdResources, packageDir);
 		if (options.hydrateResourceBytes) {
 			await this._hydratePackageResourceBytes(ctx.document, createdResources, packageDir);
 		}
+	}
+
+	private _applyFolderTextureSetMode(
+		resource: ReturnType<Package['listResources']>[number],
+		modes: ReadonlyMap<string, string>,
+	): void {
+		if (resource.propertyType !== 'ImageResource' && resource.propertyType !== 'MovieClipResource') return;
+		const textureResource = resource as unknown as {
+			getPath(): string;
+			setFolderTextureSetMode(value: string): unknown;
+		};
+		textureResource.setFolderTextureSetMode(resolveFolderTextureSetMode(textureResource.getPath(), modes));
 	}
 
 	private async _hydratePackageImageSizes(

@@ -20,6 +20,7 @@ interface IImageResource extends IExtensibleProperty {
 	height: number;
 	exported: boolean;
 	textureSetMode: string;
+	folderTextureSetMode: string;
 	qualityOption: string;
 	smoothing: boolean;
 	duplicatePadding: boolean;
@@ -55,6 +56,7 @@ export class ImageResource extends ExtensibleProperty<IImageResource> {
 			height: 0,
 			exported: false,
 			textureSetMode: '',
+			folderTextureSetMode: '',
 			qualityOption: '',
 			smoothing: true,
 			duplicatePadding: false,
@@ -97,6 +99,9 @@ export class ImageResource extends ExtensibleProperty<IImageResource> {
 
 	public getTextureSetMode(): string { return this.get('textureSetMode'); }
 	public setTextureSetMode(v: string): this { return this.set('textureSetMode', v); }
+
+	public getFolderTextureSetMode(): string { return this.get('folderTextureSetMode'); }
+	public setFolderTextureSetMode(v: string): this { return this.set('folderTextureSetMode', v); }
 
 	public getQualityOption(): string { return this.get('qualityOption'); }
 	public setQualityOption(v: string): this { return this.set('qualityOption', v); }
