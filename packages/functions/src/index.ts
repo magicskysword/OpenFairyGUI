@@ -63,7 +63,10 @@ export {
 	type ResolvePublishOptionsOverrides,
 } from './publish.js';
 export {
+	MemoryArtifactConflictError,
 	publishToMemory,
+	type MemoryArtifactProducer,
+	type MemoryArtifactWrite,
 	type MemoryPublishArtifact,
 	type PublishToMemoryOptions,
 } from './publish-memory.js';

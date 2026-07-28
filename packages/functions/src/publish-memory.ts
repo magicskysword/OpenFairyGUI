@@ -17,6 +17,32 @@ export interface MemoryPublishArtifact {
 	data: Uint8Array;
 }
 
+export type MemoryArtifactProducer = 'atlas' | 'publish-output';
+
+export interface MemoryArtifactWrite {
+	producer: MemoryArtifactProducer;
+	path: string;
+	byteLength: number;
+}
+
+export class MemoryArtifactConflictError extends Error {
+	public readonly code = 'DUPLICATE_MEMORY_ARTIFACT';
+
+	constructor(
+		public readonly fileName: string,
+		public readonly first: MemoryArtifactWrite,
+		public readonly conflicting: MemoryArtifactWrite,
+	) {
+		super(
+			`publishToMemory: Artifact file name "${fileName}" conflicts; ` +
+			`first producer ${first.producer} wrote "${first.path}" (${first.byteLength} bytes), ` +
+			`conflicting producer ${conflicting.producer} attempted "${conflicting.path}" ` +
+			`(${conflicting.byteLength} bytes).`,
+		);
+		this.name = 'MemoryArtifactConflictError';
+	}
+}
+
 export type PublishToMemoryOptions = Omit<
 	PublishOptions,
 	'output' | 'fs' | 'codeGeneration' | 'generateCode'
@@ -116,21 +142,36 @@ export async function publishToMemory(
 	doc: Document,
 	options: PublishToMemoryOptions = {},
 ): Promise<MemoryPublishArtifact[]> {
-	const artifacts = new Map<string, Uint8Array>();
+	const artifacts = new Map<string, { data: Uint8Array; write: MemoryArtifactWrite }>();
+	const addArtifact = (
+		filePath: string,
+		data: Uint8Array,
+		producer: MemoryArtifactProducer,
+	): void => {
+		const fileName = basename(filePath);
+		const write: MemoryArtifactWrite = {
+			producer,
+			path: filePath,
+			byteLength: data.byteLength,
+		};
+		const existing = artifacts.get(fileName);
+		if (existing) {
+			throw new MemoryArtifactConflictError(fileName, existing.write, write);
+		}
+		artifacts.set(fileName, { data: data.slice(), write });
+	};
 	const fs: PublishFileSystem = {
 		join: joinMemoryPath,
 		mkdir: async () => undefined,
 		writeFileRaw: async (filePath, data) => {
-			const fileName = basename(filePath);
-			if (artifacts.has(fileName)) {
-				throw new Error(`publishToMemory: Duplicate artifact file name "${fileName}".`);
-			}
-			artifacts.set(fileName, data.slice());
+			addArtifact(filePath, data, 'publish-output');
 		},
 		...(options.atlas?.readFileRaw ? { readFileRaw: options.atlas.readFileRaw } : {}),
 	};
 	const encoder = options.encoder
-		? createMemoryOutputBackend(options.encoder, fs.writeFileRaw)
+		? createMemoryOutputBackend(options.encoder, async (filePath, data) => {
+			addArtifact(filePath, data, 'atlas');
+		})
 		: undefined;
 
 	await publish({
@@ -143,5 +184,5 @@ export async function publishToMemory(
 
 	return [...artifacts.entries()]
 		.sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
-		.map(([fileName, data]) => ({ fileName, data }));
+		.map(([fileName, artifact]) => ({ fileName, data: artifact.data }));
 }

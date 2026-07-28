@@ -391,6 +391,72 @@ test('publishToMemory: returns runtime package and atlas bytes without an output
 	}
 });
 
+test('publishToMemory: duplicate artifacts report both producers without overwriting bytes', async (t) => {
+	const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'openfairygui-pub-memory-conflict-'));
+	try {
+		const doc = new Document();
+		doc.getRoot().setProjectType(7);
+		for (const [packageName, packageId, imageId, color] of [
+			['First', 'first001', 'image01', { r: 160, g: 40, b: 40, alpha: 1 }],
+			['Second', 'second01', 'image02', { r: 40, g: 80, b: 160, alpha: 1 }],
+		] as const) {
+			const packageDir = path.join(tmpDir, packageName);
+			await fs.mkdir(packageDir, { recursive: true });
+			await sharp({
+				create: {
+					width: 16,
+					height: 16,
+					channels: 4,
+					background: color,
+				},
+			}).png().toFile(path.join(packageDir, 'icon.png'));
+
+			const pkg = doc.createPackage(packageName);
+			pkg.setId(packageId).setPublishName('Shared');
+			const image = doc.createImageResource('icon');
+			image
+				.setId(imageId)
+				.setPath('/')
+				.setFileName('icon.png')
+				.setWidth(16)
+				.setHeight(16)
+				.setExported(true);
+			pkg.addResource(image);
+		}
+
+		const error = await t.throwsAsync(
+			() => publishToMemory(doc, {
+				encoder: sharp,
+				basePath: tmpDir,
+				fileExtension: 'fui',
+			}),
+			{ instanceOf: Error },
+		);
+		const conflict = error as Error & {
+			code?: string;
+			fileName?: string;
+			first?: { producer?: string; path?: string; byteLength?: number };
+			conflicting?: { producer?: string; path?: string; byteLength?: number };
+		};
+		t.is(conflict.name, 'MemoryArtifactConflictError');
+		t.is(conflict.code, 'DUPLICATE_MEMORY_ARTIFACT');
+		t.is(conflict.fileName, 'Shared_atlas0.png');
+		t.like(conflict.first, {
+			producer: 'atlas',
+			path: '/fairygui-runtime/Shared_atlas0.png',
+		});
+		t.like(conflict.conflicting, {
+			producer: 'atlas',
+			path: '/fairygui-runtime/Shared_atlas0.png',
+		});
+		t.true((conflict.first?.byteLength ?? 0) > 0);
+		t.true((conflict.conflicting?.byteLength ?? 0) > 0);
+		t.regex(conflict.message, /Shared_atlas0\.png.*first.*atlas.*conflicting.*atlas/i);
+	} finally {
+		await fs.rm(tmpDir, { recursive: true, force: true });
+	}
+});
+
 test('publish: includes linked high-resolution image resources without upscaling', async (t) => {
 	const doc = new Document();
 	doc.getRoot().setProjectType(4);
