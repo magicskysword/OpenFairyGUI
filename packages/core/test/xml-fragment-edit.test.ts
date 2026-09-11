@@ -14,7 +14,7 @@ test('XML controller pages allocate scoped IDs and rewrite Gear page labels', (t
 	});
 	t.true(result.xml.includes('pages="0,Up,1,Down"'));
 	t.true(result.xml.includes('pages="0,1"'));
-	t.true(result.xml.includes('idNum="5"'));
+	t.true(result.xml.includes('idnum="5"'));
 });
 
 test('XML replacement validates target structure and unknown reference impact', (t) => {

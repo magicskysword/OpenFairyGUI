@@ -328,7 +328,7 @@ export function editComponentXml(
 		.map((entry) => /^n(\d+)$/.exec(String(attrsOf(entry).id ?? '')))
 		.filter(Boolean)
 		.map((match) => Number(match![1]) + 1);
-	attrsOf(updatedRoot).idNum = Math.max(Number(attrsOf(updatedRoot).idNum ?? 0), ...numericIds, 0);
+	attrsOf(updatedRoot).idnum = Math.max(Number(attrsOf(updatedRoot).idnum ?? 0), ...numericIds, 0);
 	const xml = new XMLBuilder({ ...options, format: true, suppressEmptyNode: true }).build(tree) as string;
 	return { xml, idMap, findings: inspectOpaqueProjectXml('component', xml) };
 }
