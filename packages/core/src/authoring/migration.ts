@@ -160,6 +160,83 @@ export function resolveBatchProperties(
 	refs: Record<string, AuthoringTarget>,
 	allowUnresolved = false,
 ): void {
+	const url = (value: unknown): unknown => {
+		if (typeof value !== 'string' || !value.startsWith('@')) return value;
+		const target = refs[value.slice(1)];
+		if (!target) return value;
+		if (!target || !['component', 'resource'].includes(target.kind) || !target.packageId)
+			throw new DocumentEditError('INVALID_CLIENT_REF', '资源字段需要资源或组件批次引用', undefined, value);
+		return `ui://${target.packageId}${target.resourceId ?? target.componentId}`;
+	};
+	for (const pkg of document.getRoot().listPackages())
+		for (const component of pkg.listComponents()) {
+			for (const owner of [component, ...component.listChildren()]) {
+				const props = readAuthoringProperties(owner);
+				const patch: Record<string, unknown> = {};
+				for (const key of [
+					'src',
+					'url',
+					'font',
+					'icon',
+					'selectedIcon',
+					'instanceIcon',
+					'instanceSelectedIcon',
+					'defaultItem',
+					'dropdown',
+					'sound',
+					'addedToStageSound',
+					'removedFromStageSound',
+					'vtScrollBarRes',
+					'hzScrollBarRes',
+					'headerRes',
+					'footerRes',
+				]) {
+					const resolved = url(props[key]);
+					if (resolved !== props[key]) {
+						if (key === 'src') {
+							const target = refs[String(props[key]).slice(1)]!;
+							patch.src = target.resourceId ?? target.componentId;
+							patch.packageId = target.packageId;
+						} else patch[key] = resolved;
+					}
+				}
+				for (const key of ['listItems', 'instanceComboItems'])
+					if (Array.isArray(props[key])) {
+						const values = props[key].map((item) =>
+							!item || typeof item !== 'object' || Array.isArray(item)
+								? item
+								: Object.fromEntries(
+										Object.entries(item).map(([field, value]) => [
+											field,
+											['url', 'icon', 'selectedIcon'].includes(field) ? url(value) : value,
+										]),
+									),
+						);
+						if (JSON.stringify(values) !== JSON.stringify(props[key])) patch[key] = values;
+					}
+				if (Object.keys(patch).length) setAuthoringProperties(owner, patch);
+			}
+			for (const node of component.listChildren())
+				for (const gear of node.listGears())
+					if (gear.getGearType() === 7) {
+						gear.setValues(
+							gear
+								.getValues()
+								.split('|')
+								.map((value) => String(url(value)))
+								.join('|'),
+						);
+						gear.setDefaultValue(url(gear.getDefaultValue()));
+					}
+			for (const transition of component.listTransitions())
+				for (const item of transition.listItems())
+					if ([9, 15].includes(item.getActionType())) {
+						item.setStartValue(
+							item.getStartValue().map((value, index) => (index === 0 ? url(value) : value)),
+						);
+						item.setEndValue(item.getEndValue().map((value, index) => (index === 0 ? url(value) : value)));
+					}
+		}
 	const graph = buildProjectReferenceGraph(document);
 	for (const edge of graph.edges) {
 		if (!edge.target.id.startsWith('@')) continue;

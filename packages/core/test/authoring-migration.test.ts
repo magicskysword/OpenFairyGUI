@@ -22,6 +22,45 @@ function fixture() {
 	return { document, source, destination, target, into };
 }
 
+test('resource-valued batch references generate qualified URLs for new list templates', (t) => {
+	const { document } = fixture();
+	const result = applyDocumentEdits(document, [
+		{
+			op: 'create',
+			target: { kind: 'node', packageId: 'package1', componentId: 'source' },
+			type: 'GList',
+			clientRef: 'list',
+			props: { name: 'items', defaultItem: '@row' },
+		},
+		{
+			op: 'create',
+			target: { kind: 'component', packageId: 'package2' },
+			clientRef: 'row',
+			props: { name: 'Row' },
+		},
+		{
+			op: 'create',
+			target: { kind: 'node', packageId: 'package1', componentId: 'source' },
+			type: 'GComponent',
+			clientRef: 'instance',
+			props: { name: 'rowInstance', src: '@row' },
+		},
+	]);
+	const list = result.document
+		.getRoot()
+		.getPackageById('package1')!
+		.listComponents()[0]!
+		.getChildById(result.clientRefs.list!.nodeId!) as any;
+	t.is(list.getDefaultItem(), `ui://package2${result.clientRefs.row!.componentId}`);
+	const instance = result.document
+		.getRoot()
+		.getPackageById('package1')!
+		.listComponents()[0]!
+		.getChildById(result.clientRefs.instance!.nodeId!) as any;
+	t.is(instance.getSrc(), result.clientRefs.row!.componentId);
+	t.is(instance.getPackageId(), 'package2');
+});
+
 test('cross-package clones retain relative resources and remap root relations', (t) => {
 	const { document, source } = fixture();
 	source.getChildById('n0')!.setId('custom');
