@@ -1914,7 +1914,7 @@ test('round-trip: display object fileName/pkg/filter metadata survives write→r
 	try {
 		await io.writeProject(doc, outFairy);
 		const hostXml = await fs.readFile(path.join(tmpDir, 'assets', 'DemoMeta', 'Host.xml'), 'utf-8');
-		t.false(/<image\b[^>]*\bfileName=/.test(hostXml), 'image omits fileName attr');
+		t.true(/<image\b[^>]*\bfileName="images\/pic.png"/.test(hostXml), 'image preserves fileName attr');
 		t.true(hostXml.includes('pkg="pkgA"'), 'image writes canonical pkg attr');
 		t.true(/\baspect(?:="true")?(?=[\s>])/.test(hostXml), 'display object writes canonical aspect attr');
 		t.true(hostXml.includes('filter="color"'), 'display object writes canonical filter attr');
@@ -1930,7 +1930,7 @@ test('round-trip: display object fileName/pkg/filter metadata survives write→r
 		t.truthy(host2, 'Host exists after round-trip');
 		const byId = new Map(host2!.listChildren().map((item) => [item.getId(), item as any]));
 
-		t.is(byId.get('n0')?.getFileName?.(), '');
+		t.is(byId.get('n0')?.getFileName?.(), 'images/pic.png');
 		t.is(byId.get('n0')?.getPackageId?.(), 'pkgA');
 		t.true(byId.get('n0')?.getAspect?.());
 		t.is(byId.get('n0')?.getFilter?.(), 'color');
