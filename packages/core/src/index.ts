@@ -283,3 +283,4 @@ export type {
 	AdaptationSettings,
 	ProjectSettings,
 } from './types/index.js';
+export * from './authoring/schema.js';

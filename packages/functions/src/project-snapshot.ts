@@ -1,6 +1,7 @@
 import {
 	ProjectReader,
 	applyDocumentEdits,
+	assertAuthoringOperations,
 	buildProjectReferenceGraph,
 	compareProjectDiagnostics,
 	DocumentEditError,
@@ -222,6 +223,7 @@ export async function prepareSnapshotEdits(
 }> {
 	if (!operations.length || operations.length > 200)
 		throw new DocumentEditError('INVALID_EDIT', '编辑批次必须包含 1 至 200 项操作');
+	assertAuthoringOperations(operations);
 	let snapshot = source;
 	let document = await snapshot.readDocument();
 	const baseline = buildProjectReferenceGraph(document).diagnostics;

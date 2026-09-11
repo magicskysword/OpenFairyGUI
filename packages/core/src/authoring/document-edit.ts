@@ -10,6 +10,7 @@ import {
 } from '../references/project-reference-graph.js';
 import { generateChildId, generatePackageId, generateResourceId } from '../utils/id-utils.js';
 import { XMLBuilder, XMLParser } from 'fast-xml-parser';
+import { assertAuthoringOperations } from './schema.js';
 
 export interface AuthoringTarget {
 	kind:
@@ -525,6 +526,7 @@ function remapComponentNodes(component: Component): void {
  * Applies an edit batch to an isolated graph and returns its affected source scope.
  */
 export function applyDocumentEdits(source: Document, operations: readonly DocumentEditOperation[]): DocumentEditResult {
+  assertAuthoringOperations(operations);
 	if (!operations.length || operations.length > 200)
 		throw new DocumentEditError('INVALID_EDIT', '编辑批次必须包含 1 至 200 项操作');
 	const document = cloneDocument(source);
