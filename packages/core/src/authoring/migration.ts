@@ -151,7 +151,11 @@ export function rewriteResourceReferences(
 /**
  * Resolves reference-valued properties after allocation so new objects can refer forward.
  */
-export function resolveBatchProperties(document: Document, refs: Record<string, AuthoringTarget>, allowUnresolved = false): void {
+export function resolveBatchProperties(
+	document: Document,
+	refs: Record<string, AuthoringTarget>,
+	allowUnresolved = false,
+): void {
 	const graph = buildProjectReferenceGraph(document);
 	for (const edge of graph.edges) {
 		if (!edge.target.id.startsWith('@')) continue;
@@ -189,7 +193,12 @@ export function resolveBatchProperties(document: Document, refs: Record<string, 
 		}
 		let value = structuredClone(props[key]);
 		if (!keys.length)
-			value = Array.isArray(value) ? value.map(v => v === edge.target.id ? id : v) : String(value).split(',').map(v => v === edge.target.id ? id : v).join(',');
+			value = Array.isArray(value)
+				? value.map((v) => (v === edge.target.id ? id : v))
+				: String(value)
+						.split(',')
+						.map((v) => (v === edge.target.id ? id : v))
+						.join(',');
 		else {
 			let parent = value as Record<string, unknown>;
 			for (const part of keys.slice(0, -1)) parent = parent[part] as Record<string, unknown>;

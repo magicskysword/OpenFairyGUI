@@ -6,6 +6,7 @@ import {
 	buildProjectReferenceGraph,
 	compareProjectDiagnostics,
 	blockingProjectDiagnostics,
+	resolveBatchProperties,
 	DocumentEditError,
 	editComponentXml,
 	serializeAffectedProjectFiles,
@@ -428,8 +429,16 @@ export async function prepareSnapshotEdits(
 			const change = { relativePath: file.relativePath, content: encoder.encode(result.xml) };
 			changes.set(change.relativePath, change);
 			snapshot = await snapshot.withChanges([change]);
-			for (const [label, nodeId] of Object.entries(result.idMap))
+			for (const [label, nodeId] of Object.entries(result.idMap)) {
+				if (Object.hasOwn(clientRefs, label))
+					throw new DocumentEditError(
+						'INVALID_CLIENT_REF',
+						'XML 局部标签与批次引用重复',
+						`operations[${index}].xml`,
+						label,
+					);
 				clientRefs[label] = { ...operation.target, kind: 'node', nodeId };
+			}
 			operationResults.push({ index, op: 'xml', targets: [operation.target] });
 			index++;
 		} else {
@@ -454,7 +463,7 @@ export async function prepareSnapshotEdits(
 				batch.push(item);
 				index++;
 			}
-			const result = applyDocumentEdits(document, batch, { imports });
+			const result = applyDocumentEdits(document, batch, { imports, clientRefs, checkReferences: false });
 			affected.push(...result.affected);
 			const before = await serializeAffectedProjectFiles(document, existingTargets(document, result.affected));
 			const after = await serializeAffectedProjectFiles(
@@ -485,6 +494,24 @@ export async function prepareSnapshotEdits(
 		}
 		document = await snapshot.readDocument();
 	}
+	resolveBatchProperties(document, clientRefs);
+	const finalized = await serializeAffectedProjectFiles(document, existingTargets(document, affected));
+	const finalChanges = finalized.map((file) => ({
+		relativePath: sourcePath(file),
+		content: encoder.encode(file.content),
+	}));
+	for (const change of finalChanges) changes.set(change.relativePath, change);
+	snapshot = await snapshot.withChanges(finalChanges);
+	const finalDocument = await snapshot.readDocument();
+	const finalDifference = firstDifference(modelState(document.getRoot()), modelState(finalDocument.getRoot()));
+	if (finalDifference)
+		throw new DocumentEditError(
+			'SERIALIZATION_FAILED',
+			'最终编辑模型回读后发生语义变化',
+			finalDifference.path,
+			finalDifference,
+		);
+	document = finalDocument;
 	const diagnostics = compareProjectDiagnostics(baseline, buildProjectReferenceGraph(document).diagnostics);
 	const blocking = blockingProjectDiagnostics(diagnostics, affected);
 	if (blocking.length)

@@ -3,6 +3,26 @@ import path from 'node:path';
 import { ProjectWriter, Document, type FileSystem, type GTextField } from '@magicskysword/openfairygui-core';
 import { captureProjectSnapshot, prepareSnapshotEdits } from '../src/project-snapshot.js';
 
+test('mixed batches resolve references to later XML labels after staging the complete batch', async (t) => {
+	const { fs } = await fixture();
+	const snapshot = await captureProjectSnapshot(fs, '/project/project.fairy');
+	const result = await prepareSnapshotEdits(snapshot, [
+		{
+			op: 'update',
+			target: { kind: 'node', packageId: 'package1', componentId: 'panel', nodeId: 'n0' },
+			props: { group: '@group' },
+		},
+		{
+			op: 'xml',
+			action: 'insert',
+			target: { kind: 'component', packageId: 'package1', componentId: 'panel' },
+			xml: '<group id="group" name="layout"/>',
+		},
+	]);
+	const root = (await result.snapshot.readDocument()).getRoot().listPackages()[0]!.listComponents()[0]!;
+	t.is((root.getChildById('n0') as GTextField).getGroup(), result.clientRefs.group!.nodeId);
+});
+
 test('all ten Gear types and scoped page patches survive native snapshot roundtrip', async (t) => {
 	const { fs } = await fixture();
 	const base = { packageId: 'package1', componentId: 'panel' };

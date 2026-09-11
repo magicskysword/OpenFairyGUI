@@ -644,7 +644,11 @@ function remapComponentNodes(component: Component): void {
 export function applyDocumentEdits(
 	source: Document,
 	operations: readonly DocumentEditOperation[],
-	options: { imports?: ReadonlyMap<string, AuthoringImportData>; clientRefs?: Record<string, AuthoringTarget>; checkReferences?: boolean } = {},
+	options: {
+		imports?: ReadonlyMap<string, AuthoringImportData>;
+		clientRefs?: Record<string, AuthoringTarget>;
+		checkReferences?: boolean;
+	} = {},
 ): DocumentEditResult {
 	assertAuthoringOperations(operations);
 	if (!operations.length || operations.length > 200)
