@@ -228,7 +228,7 @@ export {
 // Resource references
 export { editComponentXml, readComponentXmlFragment, type XmlFragmentOperation } from './authoring/xml-fragment-edit.js';
 export {
-	cloneDocument, readAuthoringProperties, setAuthoringProperties, resolveAuthoringTarget, applyDocumentEdits, DocumentEditError,
+	cloneDocument, readAuthoringProperties, setAuthoringProperties, resolveAuthoringTarget, applyDocumentEdits, DocumentEditError, AUTHORING_GEAR_FIELDS,
 	type AuthoringTarget, type AuthoringScope, type DocumentEditOperation, type DocumentEditResult, type AuthoringImportData,
 } from './authoring/document-edit.js';
 export {

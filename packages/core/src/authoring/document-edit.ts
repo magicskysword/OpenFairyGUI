@@ -352,18 +352,19 @@ export function resolveAuthoringTarget(document: Document, target: AuthoringTarg
 	return values;
 }
 
-const gearFields: Record<number, string[]> = {
+export const AUTHORING_GEAR_FIELDS: Readonly<Record<number, readonly string[]>> = {
 	[GearType.Display]: ['visible'],
 	[GearType.Display2]: ['visible'],
 	[GearType.XY]: ['x', 'y'],
 	[GearType.Size]: ['width', 'height', 'scaleX', 'scaleY'],
 	[GearType.Look]: ['alpha', 'rotation', 'grayed', 'touchable'],
-	[GearType.Color]: ['color', 'outlineColor'],
+	[GearType.Color]: ['color', 'strokeColor'],
 	[GearType.Animation]: ['playing', 'frame'],
 	[GearType.Text]: ['text'],
 	[GearType.Icon]: ['icon'],
 	[GearType.FontSize]: ['fontSize'],
 };
+const gearFields = AUTHORING_GEAR_FIELDS;
 
 function updateNode(node: GObject, props: Record<string, unknown>, scope?: AuthoringScope): void {
 	const bindings = node

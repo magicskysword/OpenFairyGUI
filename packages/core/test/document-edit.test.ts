@@ -12,6 +12,16 @@ function fixture() {
 	return { document, component };
 }
 
+test('native text strokeColor edits use the Color Gear page scope', t => {
+	const { document, component } = fixture();
+	const controller = document.createController('state'); controller.addPage(document.createControllerPage('a').setId('0')); component.addController(controller);
+	component.getChildById('n0')!.addGear(document.createGear().setGearType(GearType.Color).setController(controller).setPages('0').setValues('#ffffff,#000000'));
+	const target = { kind: 'node' as const, packageId: 'package1', componentId: 'panel', nodeId: 'n0' };
+	t.throws(() => applyDocumentEdits(document, [{ op: 'update', target, props: { strokeColor: '#ff0000' } }]), { code: 'GEAR_SCOPE_REQUIRED' });
+	const result = applyDocumentEdits(document, [{ op: 'update', target, props: { strokeColor: '#ff0000' }, scope: { controller: 'state', pageId: '0' } }]);
+	t.is(result.document.getRoot().listPackages()[0]!.listComponents()[0]!.getChildById('n0')!.listGears()[0]!.getValues(), '#ffffff,#ff0000');
+});
+
 test('allPages patches only the pages already defined by its Gear', t => {
 	const { document, component } = fixture();
 	const controller = document.createController('state'); component.addController(controller);
