@@ -78,6 +78,7 @@ export {
 	type ApplyUamTransactionAppResult,
 } from './uam-transaction.js';
 export { createTransform } from './utils.js';
+export { captureProjectSnapshot, prepareSnapshotEdits, ProjectSnapshot, type SnapshotEditOperation, type SnapshotFile, type SnapshotChange } from './project-snapshot.js';
 export type {
 	CliAtlasSettings,
 	CliPublishSettings,
