@@ -12,6 +12,7 @@ import {
 import { generateChildId, generatePackageId, generateResourceId } from '../utils/id-utils.js';
 import { XMLBuilder, XMLParser } from 'fast-xml-parser';
 import { assertAuthoringOperations } from './schema.js';
+import { findOpaqueProjectXmlReferences } from '../io/opaque-project-xml.js';
 import {
 	mapNodeScope,
 	retainRelativeResources,
@@ -553,6 +554,16 @@ function cloneProperty<T extends Property>(document: Document, source: T, retain
 
 function remapComponentNodes(component: Component): void {
 	const ids = new Map(component.listChildren().map((child, index) => [child.getId(), `n${index}`]));
+	const rawXml = component.getExtras()._sourceComponentXml;
+	if (typeof rawXml === 'string') {
+		const findings = findOpaqueProjectXmlReferences(
+			'component',
+			rawXml,
+			new Set([...ids].filter(([oldId, id]) => oldId !== id).map(([id]) => id)),
+		);
+		if (findings.length)
+			throw new DocumentEditError('UNSAFE_REFERENCE', '附加 XML 的局部引用无法安全重映射', 'target', findings);
+	}
 	for (const child of component.listChildren()) {
 		child.setId(ids.get(child.getId())!);
 		child.setRelations(child.getRelations().map((r) => ({ ...r, target: ids.get(r.target) ?? r.target })));
@@ -802,6 +813,28 @@ export function applyDocumentEdits(
 				objects = resolveAuthoringTarget(document, target);
 				for (const object of objects) {
 					if (target.kind === 'node') target.nodeId = (object as GObject).getId();
+					if (['remove', 'replace', 'move'].includes(operation.op)) {
+						const identity = referenceTarget(target);
+						if (identity)
+							for (const candidatePackage of document.getRoot().listPackages())
+								for (const candidate of candidatePackage.listComponents()) {
+									const xml = candidate.getExtras()._sourceComponentXml;
+									if (typeof xml !== 'string') continue;
+									const tokens = new Set<string>();
+									if (identity.kind === 'resource') {
+										tokens.add(`ui://${identity.packageId}${identity.id}`);
+										if (candidatePackage === pkg) tokens.add(identity.id);
+									} else if (candidate === component) tokens.add(identity.id);
+									const findings = findOpaqueProjectXmlReferences('component', xml, tokens);
+									if (findings.length)
+										throw new DocumentEditError(
+											'UNSAFE_REFERENCE',
+											'附加 XML 中存在无法确认影响的引用',
+											'target',
+											findings,
+										);
+								}
+					}
 					if (operation.op === 'update') {
 						if (target.kind === 'resource' && operation.props?.name !== undefined)
 							renameAuthoringResource(

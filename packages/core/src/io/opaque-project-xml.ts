@@ -1,9 +1,5 @@
 import { parseXMLPreserveOrder } from '../utils/xml-utils.js';
-import {
-	PROJECT_XML_PROTOCOL,
-	type XmlNodeProtocol,
-	listXmlAttrNames,
-} from './project-xml-protocol.js';
+import { PROJECT_XML_PROTOCOL, type XmlNodeProtocol, listXmlAttrNames } from './project-xml-protocol.js';
 
 export type OpaqueProjectXmlKind = 'project' | 'package' | 'branch' | 'component';
 
@@ -11,6 +7,34 @@ export interface OpaqueXmlFinding {
 	kind: 'attribute' | 'element';
 	name: string;
 	path: string;
+}
+
+/**
+ * Finds identity tokens in fields whose reference semantics are not modeled.
+ */
+export function findOpaqueProjectXmlReferences(
+	kind: OpaqueProjectXmlKind,
+	xml: string,
+	identities: ReadonlySet<string>,
+): OpaqueXmlFinding[] {
+	const root = parseDocument(xml);
+	const findings: OpaqueXmlFinding[] = [];
+	const matches = (value: unknown) =>
+		String(value)
+			.split(/[\s,;|"'<>\[\]{}=]+/)
+			.some((token) => token.length > 0 && identities.has(token));
+	const visit = (element: XmlElement, schema: XmlSchema | undefined, path: string): void => {
+		for (const [name, value] of Object.entries(element.attrs))
+			if (!schema?.attrs.has(name) && matches(value))
+				findings.push({ kind: 'attribute', name, path: `${path}/@${name}` });
+		for (const child of element.children) {
+			if (child.kind === 'text') {
+				if (!schema && matches(child.value)) findings.push({ kind: 'element', name: element.name, path });
+			} else visit(child, schema ? childSchema(schema, child.name) : undefined, findingPath(path, child));
+		}
+	};
+	visit(root, PROJECT_SCHEMAS[kind], findingPath('', root));
+	return findings;
 }
 
 interface XmlSchema {
@@ -150,11 +174,11 @@ function nodesFromEntry(entry: OrderedXmlEntry): XmlAstNode[] {
 		if (name.startsWith('#')) continue;
 
 		const children = Array.isArray(value)
-			? value.flatMap((child) => (
-				child && typeof child === 'object' && !Array.isArray(child)
-					? nodesFromEntry(child as OrderedXmlEntry)
-					: []
-			))
+			? value.flatMap((child) =>
+					child && typeof child === 'object' && !Array.isArray(child)
+						? nodesFromEntry(child as OrderedXmlEntry)
+						: [],
+				)
 			: [];
 		nodes.push({
 			kind: 'element',
@@ -194,27 +218,20 @@ function identityValue(element: XmlElement, key: string): string {
 	return value === undefined || value === null ? '' : String(value);
 }
 
-function findGeneratedMatch(
-	source: XmlElement,
-	generated: XmlAstNode[],
-	used: Set<number>,
-): number {
+function findGeneratedMatch(source: XmlElement, generated: XmlAstNode[], used: Set<number>): number {
 	const candidates = generated
 		.map((node, index) => ({ node, index }))
-		.filter(({ node, index }) => (
-			node.kind === 'element'
-			&& node.name.toLowerCase() === source.name.toLowerCase()
-			&& !used.has(index)
-		));
+		.filter(
+			({ node, index }) =>
+				node.kind === 'element' && node.name.toLowerCase() === source.name.toLowerCase() && !used.has(index),
+		);
 
 	let hasStableIdentity = false;
 	for (const identity of ['id', 'name']) {
 		const value = identityValue(source, identity);
 		if (!value) continue;
 		hasStableIdentity = true;
-		const match = candidates.find(({ node }) => (
-			node.kind === 'element' && identityValue(node, identity) === value
-		));
+		const match = candidates.find(({ node }) => node.kind === 'element' && identityValue(node, identity) === value);
 		if (match) return match.index;
 	}
 	if (hasStableIdentity) return -1;
@@ -222,11 +239,12 @@ function findGeneratedMatch(
 	const type = identityValue(source, 'type');
 	const target = identityValue(source, 'target');
 	if (type || target) {
-		const match = candidates.find(({ node }) => (
-			node.kind === 'element'
-			&& identityValue(node, 'type') === type
-			&& identityValue(node, 'target') === target
-		));
+		const match = candidates.find(
+			({ node }) =>
+				node.kind === 'element' &&
+				identityValue(node, 'type') === type &&
+				identityValue(node, 'target') === target,
+		);
 		if (match) return match.index;
 	}
 
@@ -299,10 +317,7 @@ function escapeAttribute(value: unknown): string {
 }
 
 function escapeText(value: string): string {
-	return value
-		.replace(/&/g, '&amp;')
-		.replace(/</g, '&lt;')
-		.replace(/>/g, '&gt;');
+	return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 function renderElement(element: XmlElement, indent = ''): string {
@@ -311,19 +326,15 @@ function renderElement(element: XmlElement, indent = ''): string {
 		.join('');
 	if (element.children.length === 0) return `${indent}<${element.name}${attrs}/>`;
 	if (element.children.every((child) => child.kind === 'text')) {
-		const text = element.children
-			.map((child) => child.kind === 'text' ? escapeText(child.value) : '')
-			.join('');
+		const text = element.children.map((child) => (child.kind === 'text' ? escapeText(child.value) : '')).join('');
 		return `${indent}<${element.name}${attrs}>${text}</${element.name}>`;
 	}
 
 	const childIndent = `${indent}  `;
 	const children = element.children
-		.map((child) => (
-			child.kind === 'text'
-				? `${childIndent}${escapeText(child.value)}`
-				: renderElement(child, childIndent)
-		))
+		.map((child) =>
+			child.kind === 'text' ? `${childIndent}${escapeText(child.value)}` : renderElement(child, childIndent),
+		)
 		.join('\n');
 	return `${indent}<${element.name}${attrs}>\n${children}\n${indent}</${element.name}>`;
 }
@@ -336,12 +347,7 @@ function findingPath(parentPath: string, element: XmlElement): string {
 	return `${parentPath}/${element.name}`;
 }
 
-function inspectElement(
-	element: XmlElement,
-	schema: XmlSchema,
-	path: string,
-	findings: OpaqueXmlFinding[],
-): void {
+function inspectElement(element: XmlElement, schema: XmlSchema, path: string, findings: OpaqueXmlFinding[]): void {
 	for (const name of Object.keys(element.attrs)) {
 		if (!schema.attrs.has(name)) {
 			findings.push({
@@ -374,11 +380,7 @@ function inspectElement(
  * Known fields always come from the generated document. Unknown content is
  * structurally retained and follows its nearest stable known owner.
  */
-export function preserveOpaqueProjectXml(
-	kind: OpaqueProjectXmlKind,
-	sourceXml: string,
-	generatedXml: string,
-): string {
+export function preserveOpaqueProjectXml(kind: OpaqueProjectXmlKind, sourceXml: string, generatedXml: string): string {
 	const source = parseDocument(sourceXml);
 	const generated = parseDocument(generatedXml);
 	if (source.name.toLowerCase() !== generated.name.toLowerCase()) {
@@ -395,10 +397,7 @@ export function preserveOpaqueProjectXml(
 }
 
 /** Reports unknown attributes and elements without making them writable. */
-export function inspectOpaqueProjectXml(
-	kind: OpaqueProjectXmlKind,
-	xml: string,
-): OpaqueXmlFinding[] {
+export function inspectOpaqueProjectXml(kind: OpaqueProjectXmlKind, xml: string): OpaqueXmlFinding[] {
 	const root = parseDocument(xml);
 	const findings: OpaqueXmlFinding[] = [];
 	inspectElement(root, PROJECT_SCHEMAS[kind], `/${root.name}`, findings);

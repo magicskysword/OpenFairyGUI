@@ -21,6 +21,22 @@ function fixture() {
 	return { document, pkg, component, node, controller };
 }
 
+test('unknown XML references block identity-changing operations while scalar updates preserve them', (t) => {
+	const f = fixture();
+	f.component.setExtras({
+		_sourceComponentXml:
+			'<component size="100,100"><custom target="n0"/><displayList><text id="n0" name="title"/></displayList></component>',
+	});
+	const target = { kind: 'node' as const, packageId: 'package1', componentId: 'panel', nodeId: 'n0' };
+	t.notThrows(() => applyDocumentEdits(f.document, [{ op: 'update', target, props: { x: 20 } }]));
+	t.throws(() => applyDocumentEdits(f.document, [{ op: 'remove', target, cascade: true }]), {
+		code: 'UNSAFE_REFERENCE',
+	});
+	t.throws(() => applyDocumentEdits(f.document, [{ op: 'replace', target, type: 'GGraph' }]), {
+		code: 'UNSAFE_REFERENCE',
+	});
+});
+
 test('page dependencies include source controller overrides and related button pages', (t) => {
 	const f = fixture();
 	const host = f.document.createComponent('Host').setId('host');
