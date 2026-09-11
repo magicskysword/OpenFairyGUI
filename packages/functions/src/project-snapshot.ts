@@ -8,6 +8,8 @@ import {
 	DocumentEditError,
 	editComponentXml,
 	serializeAffectedProjectFiles,
+	projectResourceFileName,
+	type AuthoringImportData,
 	type Document,
 	type DocumentEditOperation,
 	type XmlFragmentOperation,
@@ -271,6 +273,38 @@ function firstDifference(
 	}
 }
 
+function binarySources(document: Document): Map<string, Uint8Array> {
+	const files = new Map<string, Uint8Array>();
+	for (const pkg of document.getRoot().listPackages())
+		for (const resource of pkg.listResources()) {
+			if (resource.propertyType === 'Component') continue;
+			const fileName = projectResourceFileName(resource);
+			const branch = resource.getBranch();
+			const relativePath = [branch ? `assets_${branch}` : 'assets', pkg.getName(), resource.getPath(), fileName]
+				.join('/')
+				.replace(/\/{2,}/g, '/');
+			const bytes = resource.getSourceData()?.getData();
+			if (bytes) files.set(relativePath, bytes);
+		}
+	return files;
+}
+function binaryChanges(before: Document, after: Document): SnapshotChange[] {
+	const oldFiles = binarySources(before);
+	const newFiles = binarySources(after);
+	const changes: SnapshotChange[] = [];
+	for (const relativePath of oldFiles.keys()) if (!newFiles.has(relativePath)) changes.push({ relativePath });
+	for (const [relativePath, content] of newFiles) {
+		const previous = oldFiles.get(relativePath);
+		if (
+			!previous ||
+			previous.length !== content.length ||
+			previous.some((value, index) => value !== content[index])
+		)
+			changes.push({ relativePath, content });
+	}
+	return changes;
+}
+
 export async function prepareSnapshotEdits(
 	source: ProjectSnapshot,
 	operations: readonly SnapshotEditOperation[],
@@ -290,6 +324,25 @@ export async function prepareSnapshotEdits(
 	const clientRefs: Record<string, AuthoringTarget> = {};
 	const changes = new Map<string, SnapshotChange>();
 	const operationResults: Array<{ index: number; op: string; targets: AuthoringTarget[] }> = [];
+	const imports = new Map<string, AuthoringImportData>();
+	const inboxPaths = new Set<string>();
+	for (const [index, operation] of operations.entries()) {
+		if (operation.op === 'xml' || !operation.inboxPath) continue;
+		const segments = operation.inboxPath.split('/');
+		if (segments.some((segment) => !segment || segment === '.' || segment === '..' || /[\\:]/.test(segment)))
+			throw new DocumentEditError(
+				'IMPORT_PATH_INVALID',
+				'收件箱路径必须是规范相对路径',
+				`operations[${index}].inboxPath`,
+			);
+		const relativePath = `.fairygui-mcp/import-inbox/${operation.inboxPath}`;
+		const fs = source.fileSystem();
+		imports.set(operation.inboxPath, {
+			fileName: segments.at(-1)!,
+			data: await fs.readFileRaw(fs.join(fs.dirname(source.projectPath), relativePath)),
+		});
+		inboxPaths.add(relativePath);
+	}
 	const sourceName = keyOf(source.projectPath).split('/').pop()!;
 	const sourcePath = (file: { kind: string; relativePath: string }) =>
 		file.kind === 'project' ? sourceName : file.relativePath;
@@ -326,7 +379,7 @@ export async function prepareSnapshotEdits(
 				batch.push(item);
 				index++;
 			}
-			const result = applyDocumentEdits(document, batch);
+			const result = applyDocumentEdits(document, batch, { imports });
 			const before = await serializeAffectedProjectFiles(document, existingTargets(document, result.affected));
 			const after = await serializeAffectedProjectFiles(
 				result.document,
@@ -334,6 +387,7 @@ export async function prepareSnapshotEdits(
 			);
 			const afterPaths = new Set(after.map(sourcePath));
 			const updates: SnapshotChange[] = [
+				...binaryChanges(document, result.document),
 				...before
 					.filter((file) => !afterPaths.has(sourcePath(file)))
 					.map((file) => ({ relativePath: sourcePath(file) })),
@@ -363,5 +417,8 @@ export async function prepareSnapshotEdits(
 			undefined,
 			diagnostics.added,
 		);
+	const consumed = [...inboxPaths].map((relativePath) => ({ relativePath }));
+	for (const change of consumed) changes.set(change.relativePath, change);
+	if (consumed.length) snapshot = await snapshot.withChanges(consumed);
 	return { snapshot, changes: [...changes.values()], clientRefs, operationResults, diagnostics };
 }

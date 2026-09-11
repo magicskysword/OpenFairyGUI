@@ -160,10 +160,61 @@ test('new packages and components preserve effective publishing defaults on roun
 	const snapshot = await captureProjectSnapshot(fs, '/project/project.fairy');
 	const result = await prepareSnapshotEdits(snapshot, [
 		{ op: 'create', target: { kind: 'package' }, props: { name: 'Widgets' }, clientRef: 'widgets' },
-		{ op: 'create', target: { kind: 'component', packageId: '@widgets' }, props: { name: 'Dialog', width: 640, height: 360 }, clientRef: 'dialog' },
+		{
+			op: 'create',
+			target: { kind: 'component', packageId: '@widgets' },
+			props: { name: 'Dialog', width: 640, height: 360 },
+			clientRef: 'dialog',
+		},
 	]);
-	const pkg = (await result.snapshot.readDocument()).getRoot().listPackages().find(item => item.getName() === 'Widgets')!;
+	const pkg = (await result.snapshot.readDocument())
+		.getRoot()
+		.listPackages()
+		.find((item) => item.getName() === 'Widgets')!;
 	t.is(pkg.getPublishName(), 'Widgets');
 	t.is(pkg.listComponents()[0]!.getWidth(), 640);
 	t.is(result.changes.length, 2);
+});
+
+test('prepared resource imports, replacements and renames carry source bytes and inbox consumption', async (t) => {
+	const { fs } = await fixture();
+	let source = await captureProjectSnapshot(fs, '/project/project.fairy');
+	source = await source.withChanges([
+		{ relativePath: '.fairygui-mcp/import-inbox/data.bin', content: new Uint8Array([1, 2, 3]) },
+	]);
+	const imported = await prepareSnapshotEdits(source, [
+		{
+			op: 'import',
+			target: { kind: 'resource', packageId: 'package1' },
+			inboxPath: 'data.bin',
+			props: { name: 'Data', path: '/Data/' },
+			clientRef: 'asset',
+		},
+	]);
+	t.deepEqual(
+		await imported.snapshot.fileSystem().readFileRaw('/project/assets/UI/Data/Data.bin'),
+		new Uint8Array([1, 2, 3]),
+	);
+	t.false(await imported.snapshot.fileSystem().exists('/project/.fairygui-mcp/import-inbox/data.bin'));
+	t.true(await source.fileSystem().exists('/project/.fairygui-mcp/import-inbox/data.bin'));
+	const target = imported.clientRefs.asset!;
+	const renamed = await prepareSnapshotEdits(imported.snapshot, [
+		{ op: 'update', target, props: { name: 'Renamed', path: '/' } },
+	]);
+	t.false(await renamed.snapshot.fileSystem().exists('/project/assets/UI/Data/Data.bin'));
+	t.deepEqual(
+		await renamed.snapshot.fileSystem().readFileRaw('/project/assets/UI/Renamed.bin'),
+		new Uint8Array([1, 2, 3]),
+	);
+	const replacement = await renamed.snapshot.withChanges([
+		{ relativePath: '.fairygui-mcp/import-inbox/new.dat', content: new Uint8Array([4]) },
+	]);
+	const replaced = await prepareSnapshotEdits(replacement, [{ op: 'replace', target, inboxPath: 'new.dat' }]);
+	t.deepEqual(
+		await replaced.snapshot.fileSystem().readFileRaw('/project/assets/UI/Renamed.dat'),
+		new Uint8Array([4]),
+	);
+	t.false(await replaced.snapshot.fileSystem().exists('/project/assets/UI/Renamed.bin'));
+	const removed = await prepareSnapshotEdits(replaced.snapshot, [{ op: 'remove', target }]);
+	t.false(await removed.snapshot.fileSystem().exists('/project/assets/UI/Renamed.dat'));
 });

@@ -7,6 +7,7 @@ export {
 } from './project-writer.js';
 export {
 	inspectProjectOutputConflicts,
+	projectResourceFileName,
 	ProjectOutputConflictError,
 	type ProjectOutputConflict,
 	type ProjectOutputProducer,

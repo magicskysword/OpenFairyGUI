@@ -251,6 +251,7 @@ export {
 	ProjectReader,
 	ProjectWriter,
 	inspectProjectOutputConflicts,
+	projectResourceFileName,
 	ProjectOutputConflictError,
 	BinaryReader,
 	BinaryWriter,
