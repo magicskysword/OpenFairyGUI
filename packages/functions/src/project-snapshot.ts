@@ -425,7 +425,12 @@ export async function prepareSnapshotEdits(
 					},
 				])
 			)[0]!;
-			const result = editComponentXml(file.content, operation);
+			let result: ReturnType<typeof editComponentXml>;
+			try { result = editComponentXml(file.content, operation); }
+			catch (error) {
+				if (error instanceof DocumentEditError) throw new DocumentEditError(error.code, error.message, `operations[${index}]${error.path ? '.' + error.path : '.xml'}`, error.details);
+				throw error;
+			}
 			const change = { relativePath: file.relativePath, content: encoder.encode(result.xml) };
 			changes.set(change.relativePath, change);
 			snapshot = await snapshot.withChanges([change]);
@@ -463,7 +468,12 @@ export async function prepareSnapshotEdits(
 				batch.push(item);
 				index++;
 			}
-			const result = applyDocumentEdits(document, batch, { imports, clientRefs, checkReferences: false });
+			let result: ReturnType<typeof applyDocumentEdits>;
+			try { result = applyDocumentEdits(document, batch, { imports, clientRefs, checkReferences: false }); }
+			catch (error) {
+				if (error instanceof DocumentEditError) throw new DocumentEditError(error.code, error.message, error.path?.replace(/^operations\[(\d+)\]/, (_, value) => `operations[${start + Number(value)}]`), error.details);
+				throw error;
+			}
 			affected.push(...result.affected);
 			const before = await serializeAffectedProjectFiles(document, existingTargets(document, result.affected));
 			const after = await serializeAffectedProjectFiles(

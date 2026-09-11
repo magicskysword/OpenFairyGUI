@@ -3,6 +3,16 @@ import path from 'node:path';
 import { ProjectWriter, Document, type FileSystem, type GTextField } from '@magicskysword/openfairygui-core';
 import { captureProjectSnapshot, prepareSnapshotEdits } from '../src/project-snapshot.js';
 
+test('mixed batch errors retain the original operation index', async t => {
+	const { fs } = await fixture();
+	const source = await captureProjectSnapshot(fs, '/project/project.fairy');
+	const error = await t.throwsAsync(() => prepareSnapshotEdits(source, [
+		{ op: 'xml', action: 'insert', target: { kind: 'component', packageId: 'package1', componentId: 'panel' }, xml: '<graph id="new"/>' },
+		{ op: 'update', target: { kind: 'node', packageId: 'package1', componentId: 'panel', nodeId: 'n0' }, props: { x: 'invalid' } },
+	]));
+	t.is((error as { path?: string }).path, 'operations[1].props.x');
+});
+
 test('mixed batches resolve references to later XML labels after staging the complete batch', async (t) => {
 	const { fs } = await fixture();
 	const snapshot = await captureProjectSnapshot(fs, '/project/project.fairy');
