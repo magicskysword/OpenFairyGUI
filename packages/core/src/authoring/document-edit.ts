@@ -644,14 +644,14 @@ function remapComponentNodes(component: Component): void {
 export function applyDocumentEdits(
 	source: Document,
 	operations: readonly DocumentEditOperation[],
-	options: { imports?: ReadonlyMap<string, AuthoringImportData> } = {},
+	options: { imports?: ReadonlyMap<string, AuthoringImportData>; clientRefs?: Record<string, AuthoringTarget>; checkReferences?: boolean } = {},
 ): DocumentEditResult {
 	assertAuthoringOperations(operations);
 	if (!operations.length || operations.length > 200)
 		throw new DocumentEditError('INVALID_EDIT', '编辑批次必须包含 1 至 200 项操作');
 	const document = cloneDocument(source);
 	const before = buildProjectReferenceGraph(source).diagnostics;
-	const clientRefs: Record<string, AuthoringTarget> = {};
+	const clientRefs: Record<string, AuthoringTarget> = structuredClone(options.clientRefs ?? {});
 	const affected = new Map<string, ProjectFileTarget>();
 	const operationResults: DocumentEditResult['operationResults'] = [];
 	const touch = (target: AuthoringTarget) => {
@@ -1091,10 +1091,10 @@ export function applyDocumentEdits(
 			);
 		}
 	});
-	resolveBatchProperties(document, clientRefs);
+	resolveBatchProperties(document, clientRefs, options.checkReferences === false);
 	const diagnostics = compareProjectDiagnostics(before, buildProjectReferenceGraph(document).diagnostics);
 	const blocking = blockingProjectDiagnostics(diagnostics, [...affected.values()]);
-	if (blocking.length)
+	if (blocking.length && options.checkReferences !== false)
 		throw new DocumentEditError('REFERENCE_VALIDATION_FAILED', '编辑产生了无效引用或身份冲突', undefined, blocking);
 	return { document, affected: [...affected.values()], clientRefs, operationResults, diagnostics };
 }

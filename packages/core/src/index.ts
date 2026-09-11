@@ -236,6 +236,7 @@ export {
 	type ProjectReferenceGraph, type ProjectReferenceEdge, type ProjectReferenceSource,
 	type ProjectReferenceTarget, type ProjectDiagnostic,
 } from './references/project-reference-graph.js';
+export { resolveBatchProperties, type AuthoringBindings } from './authoring/migration.js';
 export {
 	buildResourceReferenceIndex,
 	ResourceReferenceIndex,
