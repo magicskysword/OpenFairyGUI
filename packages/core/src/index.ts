@@ -227,6 +227,11 @@ export {
 
 // Resource references
 export {
+	buildProjectReferenceGraph, compareProjectDiagnostics, projectReferenceKey,
+	type ProjectReferenceGraph, type ProjectReferenceEdge, type ProjectReferenceSource,
+	type ProjectReferenceTarget, type ProjectDiagnostic,
+} from './references/project-reference-graph.js';
+export {
 	buildResourceReferenceIndex,
 	ResourceReferenceIndex,
 	type ResourceReference,
