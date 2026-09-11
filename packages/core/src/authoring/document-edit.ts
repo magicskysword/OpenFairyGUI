@@ -414,7 +414,28 @@ function referenceTarget(target: AuthoringTarget): ProjectReferenceTarget | unde
 	}
 }
 
-function clearReference(document: Document, edge: ProjectReferenceEdge): void {
+function uniqueCascades(dependencies: ProjectReferenceEdge[]): ProjectReferenceEdge[] {
+	return [
+		...new Map(
+			dependencies.map((edge) => [
+				JSON.stringify([
+					edge.source,
+					edge.source.itemIndex !== undefined ||
+					edge.source.actionIndex !== undefined ||
+					edge.source.gearIndex !== undefined
+						? null
+						: edge.field,
+				]),
+				edge,
+			]),
+		).values(),
+	].sort(
+		(a, b) =>
+			(b.source.itemIndex ?? b.source.gearIndex ?? b.source.actionIndex ?? 0) -
+			(a.source.itemIndex ?? a.source.gearIndex ?? a.source.actionIndex ?? 0),
+	);
+}
+function clearReference(document: Document, edge: ProjectReferenceEdge, removing = new Set<Property>()): void {
 	const source = edge.source;
 	const component = document
 		.getRoot()
@@ -422,11 +443,23 @@ function clearReference(document: Document, edge: ProjectReferenceEdge): void {
 		.listComponents()
 		.find((c) => c.getId() === source.componentId)!;
 	const node = source.nodeId ? component.getChildById(source.nodeId) : null;
+	if (source.nodeId && !node) return;
 	if (edge.cascade === 'unsupported')
 		throw new DocumentEditError('UNSAFE_REFERENCE', '引用无法安全级联清理', edge.field, edge);
 	if (source.gearIndex !== undefined && node) {
 		const gear = node.listGears()[source.gearIndex];
-		if (gear) node.removeGear(gear);
+		if (gear && edge.target.kind === 'page') {
+			const pages = gear.getPages().split(',').filter(Boolean);
+			const values = gear.getValues().split('|');
+			const retained = pages
+				.map((id, index) => ({ id, value: values[index] ?? '' }))
+				.filter((page) => page.id !== edge.target.id);
+			const pageValues = { ...gear.getPageValues() };
+			delete pageValues[edge.target.id];
+			gear.setPages(retained.map((page) => page.id).join(','))
+				.setValues(retained.map((page) => page.value).join('|'))
+				.setPageValues(pageValues);
+		} else if (gear) node.removeGear(gear);
 		return;
 	}
 	if (source.itemIndex !== undefined && source.transition) {
@@ -451,8 +484,18 @@ function clearReference(document: Document, edge: ProjectReferenceEdge): void {
 		);
 	} else if (edge.field === 'mask') component.setMask('').setReversedMask(false);
 	else if (edge.field === 'group') invoke(owner, 'setGroup', '');
-	else if (edge.cascade === 'remove-owner' && node) component.removeChild(node);
-	else if (/^listItems\[(\d+)\]\.(\w+)$/.test(edge.field)) {
+	else if (edge.cascade === 'remove-owner' && node) {
+		if (removing.has(node)) return;
+		removing.add(node);
+		const dependents = buildProjectReferenceGraph(document).find({
+			kind: 'node',
+			packageId: source.packageId,
+			componentId: source.componentId,
+			id: node.getId(),
+		});
+		for (const dependent of uniqueCascades(dependents)) clearReference(document, dependent, removing);
+		component.removeChild(node);
+	} else if (/^listItems\[(\d+)\]\.(\w+)$/.test(edge.field)) {
 		const match = /^listItems\[(\d+)\]\.(\w+)$/.exec(edge.field)!;
 		const items = structuredClone(invoke(owner, 'getListItems')) as Record<string, unknown>[];
 		items[Number(match[1])]![match[2]!] = null;
@@ -735,16 +778,19 @@ export function applyDocumentEdits(
 					} else if (operation.op === 'remove') {
 						const ref = referenceTarget(target);
 						const graph = buildProjectReferenceGraph(document);
-						const dependencies = ref ? graph.find(ref) : [];
+						const dependencies =
+							target.kind === 'package'
+								? graph.edges.filter(
+										(edge) =>
+											edge.target.packageId === target.packageId &&
+											edge.source.packageId !== target.packageId,
+									)
+								: ref
+									? graph.find(ref)
+									: [];
 						if (dependencies.length && !operation.cascade)
 							throw new DocumentEditError('DEPENDENCY_EXISTS', '目标仍被引用', 'target', dependencies);
-						const unique = [
-							...new Map(dependencies.map((e) => [JSON.stringify([e.source, e.field]), e])).values(),
-						].sort(
-							(a, b) =>
-								(b.source.itemIndex ?? b.source.gearIndex ?? b.source.actionIndex ?? 0) -
-								(a.source.itemIndex ?? a.source.gearIndex ?? a.source.actionIndex ?? 0),
-						);
+						const unique = uniqueCascades(dependencies);
 						for (const edge of unique) {
 							clearReference(document, edge);
 							touch({

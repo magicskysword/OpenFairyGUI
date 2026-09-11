@@ -168,6 +168,29 @@ export function buildProjectReferenceGraph(document: Document): ProjectReference
 		}
 	}
 	for (const ref of buildResourceReferenceIndex(document).list()) {
+		if (ref.source.field.startsWith('gear.') || ref.source.field.startsWith('transitions.items[')) continue;
+		const expectedType =
+			ref.source.field === 'src'
+				? (
+						{ GImage: 'ImageResource', GMovieClip: 'MovieClipResource', GComponent: 'Component' } as Record<
+							string,
+							string
+						>
+					)[ref.source.ownerType]
+				: ref.source.field === 'font'
+					? 'FontResource'
+					: [
+								'defaultItem',
+								'dropdown',
+								'vtScrollBarRes',
+								'hzScrollBarRes',
+								'headerRes',
+								'footerRes',
+							].includes(ref.source.field) || /^listItems\[\d+\]\.url$/.test(ref.source.field)
+						? 'Component'
+						: /(?:^sound$|Sound$)/.test(ref.source.field)
+							? 'SoundResource'
+							: undefined;
 		edges.push({
 			source: {
 				packageId: ref.source.packageId,
@@ -177,8 +200,31 @@ export function buildProjectReferenceGraph(document: Document): ProjectReference
 			target: { kind: 'resource', packageId: ref.target.packageId, id: ref.target.resourceId },
 			field: ref.source.field,
 			cascade: ref.cascadeAction,
+			...(expectedType ? { expectedType } : {}),
 		});
 	}
+	const resourceEdges = (
+		value: unknown,
+		source: ProjectReferenceSource,
+		field: string,
+		cascade: ProjectReferenceEdge['cascade'],
+		expectedType?: string,
+	): void => {
+		if (typeof value === 'string') {
+			for (const match of value.matchAll(/ui:\/\/([a-zA-Z0-9]{8})([a-zA-Z0-9_./-]+)/g))
+				edges.push({
+					source,
+					field,
+					cascade,
+					target: { kind: 'resource', packageId: match[1]!, id: match[2]! },
+					...(expectedType ? { expectedType } : {}),
+				});
+		} else if (Array.isArray(value))
+			value.forEach((entry, index) => resourceEdges(entry, source, `${field}[${index}]`, cascade, expectedType));
+		else if (value && typeof value === 'object')
+			for (const [key, entry] of Object.entries(value))
+				resourceEdges(entry, source, `${field}.${key}`, cascade, expectedType);
+	};
 	for (const pkg of document.getRoot().listPackages()) {
 		for (const component of pkg.listComponents()) {
 			const scope = { packageId: pkg.getId(), componentId: component.getId() };
@@ -210,6 +256,12 @@ export function buildProjectReferenceGraph(document: Document): ProjectReference
 					const controller =
 						gear.getController()?.getName() || String(gear.getExtras().controllerName ?? '<missing>');
 					const gearSource = { ...source, gearIndex };
+					for (const [field, value] of [
+						['values', gear.getValues()],
+						['defaultValue', gear.getDefaultValue()],
+						['pageValues', gear.getPageValues()],
+					] as const)
+						resourceEdges(value, gearSource, field, 'remove-binding');
 					edges.push({
 						source: gearSource,
 						target: { ...scope, kind: 'controller', id: controller },
@@ -284,6 +336,10 @@ export function buildProjectReferenceGraph(document: Document): ProjectReference
 			for (const transition of component.listTransitions()) {
 				transition.listItems().forEach((item, itemIndex) => {
 					const source = { ...scope, transition: transition.getName(), itemIndex };
+					const resourceType =
+						item.getActionType() === TransitionActionType.Sound ? 'SoundResource' : undefined;
+					resourceEdges(item.getStartValue(), source, 'startValue', 'remove-item', resourceType);
+					resourceEdges(item.getEndValue(), source, 'endValue', 'remove-item', resourceType);
 					nodeEdge(source, item.getTargetId(), 'targetId', 'remove-item');
 					if (item.getActionType() === TransitionActionType.Transition) {
 						const target = instanceSource(document, scope.packageId, component, item.getTargetId());
