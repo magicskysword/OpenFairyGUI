@@ -853,7 +853,8 @@ export function applyDocumentEdits(
 				if (operation.clientRef) clientRefs[operation.clientRef] = { ...target };
 			} else {
 				objects = resolveAuthoringTarget(document, target);
-				if (operation.clientRef && objects.length !== 1) throw new DocumentEditError('INVALID_CLIENT_REF', 'clientRef 需要唯一的新对象', 'clientRef');
+				if (operation.clientRef && objects.length !== 1)
+					throw new DocumentEditError('INVALID_CLIENT_REF', 'clientRef 需要唯一的新对象', 'clientRef');
 				for (const object of objects) {
 					Object.assign(target, originalTarget);
 					if (target.kind === 'node') target.nodeId = (object as GObject).getId();
@@ -1101,7 +1102,11 @@ export function applyDocumentEdits(
 				}
 			}
 			touch(target);
-			operationResults.push({ index, op: operation.op, targets: resolvedTargets.length ? resolvedTargets : [{ ...target }] });
+			operationResults.push({
+				index,
+				op: operation.op,
+				targets: resolvedTargets.length ? resolvedTargets : [{ ...target }],
+			});
 		} catch (error) {
 			if (error instanceof DocumentEditError)
 				throw new DocumentEditError(

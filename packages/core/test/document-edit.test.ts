@@ -12,30 +12,88 @@ function fixture() {
 	return { document, component };
 }
 
-test('selector batch results list every affected target in document order', t => {
-	const { document, component } = fixture(); component.addChild(document.createGTextField('second').setId('n1'));
-	const result = applyDocumentEdits(document, [{ op: 'update', target: { kind: 'node', packageId: 'package1', componentId: 'panel', selector: 'GTextField', expectedMatches: 2 }, props: { x: 20 } }]);
-	t.deepEqual(result.operationResults[0]!.targets.map(target => target.nodeId), ['n0', 'n1']);
+test('selector batch results list every affected target in document order', (t) => {
+	const { document, component } = fixture();
+	component.addChild(document.createGTextField('second').setId('n1'));
+	const result = applyDocumentEdits(document, [
+		{
+			op: 'update',
+			target: {
+				kind: 'node',
+				packageId: 'package1',
+				componentId: 'panel',
+				selector: 'GTextField',
+				expectedMatches: 2,
+			},
+			props: { x: 20 },
+		},
+	]);
+	t.deepEqual(
+		result.operationResults[0]!.targets.map((target) => target.nodeId),
+		['n0', 'n1'],
+	);
 });
 
-test('native text strokeColor edits use the Color Gear page scope', t => {
+test('native text strokeColor edits use the Color Gear page scope', (t) => {
 	const { document, component } = fixture();
-	const controller = document.createController('state'); controller.addPage(document.createControllerPage('a').setId('0')); component.addController(controller);
-	component.getChildById('n0')!.addGear(document.createGear().setGearType(GearType.Color).setController(controller).setPages('0').setValues('#ffffff,#000000'));
+	const controller = document.createController('state');
+	controller.addPage(document.createControllerPage('a').setId('0'));
+	component.addController(controller);
+	component
+		.getChildById('n0')!
+		.addGear(
+			document
+				.createGear()
+				.setGearType(GearType.Color)
+				.setController(controller)
+				.setPages('0')
+				.setValues('#ffffff,#000000'),
+		);
 	const target = { kind: 'node' as const, packageId: 'package1', componentId: 'panel', nodeId: 'n0' };
-	t.throws(() => applyDocumentEdits(document, [{ op: 'update', target, props: { strokeColor: '#ff0000' } }]), { code: 'GEAR_SCOPE_REQUIRED' });
-	const result = applyDocumentEdits(document, [{ op: 'update', target, props: { strokeColor: '#ff0000' }, scope: { controller: 'state', pageId: '0' } }]);
-	t.is(result.document.getRoot().listPackages()[0]!.listComponents()[0]!.getChildById('n0')!.listGears()[0]!.getValues(), '#ffffff,#ff0000');
+	t.throws(() => applyDocumentEdits(document, [{ op: 'update', target, props: { strokeColor: '#ff0000' } }]), {
+		code: 'GEAR_SCOPE_REQUIRED',
+	});
+	const result = applyDocumentEdits(document, [
+		{ op: 'update', target, props: { strokeColor: '#ff0000' }, scope: { controller: 'state', pageId: '0' } },
+	]);
+	t.is(
+		result.document
+			.getRoot()
+			.listPackages()[0]!
+			.listComponents()[0]!
+			.getChildById('n0')!
+			.listGears()[0]!
+			.getValues(),
+		'#ffffff,#ff0000',
+	);
 });
 
-test('allPages patches only the pages already defined by its Gear', t => {
+test('allPages patches only the pages already defined by its Gear', (t) => {
 	const { document, component } = fixture();
-	const controller = document.createController('state'); component.addController(controller);
+	const controller = document.createController('state');
+	component.addController(controller);
 	for (const id of ['a', 'b', 'c']) controller.addPage(document.createControllerPage(id).setId(id));
-	component.getChildById('n0')!.addGear(document.createGear().setGearType(GearType.XY).setController(controller).setPages('a,b').setValues('1,2|3,4'));
-	const result = applyDocumentEdits(document, [{ op: 'update', target: { kind: 'node', packageId: 'package1', componentId: 'panel', nodeId: 'n0' }, props: { x: 10 }, scope: { controller: 'state', allPages: true } }]);
+	component
+		.getChildById('n0')!
+		.addGear(
+			document
+				.createGear()
+				.setGearType(GearType.XY)
+				.setController(controller)
+				.setPages('a,b')
+				.setValues('1,2|3,4'),
+		);
+	const result = applyDocumentEdits(document, [
+		{
+			op: 'update',
+			target: { kind: 'node', packageId: 'package1', componentId: 'panel', nodeId: 'n0' },
+			props: { x: 10 },
+			scope: { controller: 'state', allPages: true },
+		},
+	]);
 	const gear = result.document.getRoot().listPackages()[0]!.listComponents()[0]!.getChildById('n0')!.listGears()[0]!;
-	t.is(gear.getPages(), 'a,b'); t.is(gear.getValues(), '10,2|10,4');
+	t.is(gear.getPages(), 'a,b');
+	t.is(gear.getValues(), '10,2|10,4');
 });
 
 test('document copies preserve opaque data and isolate graph references', (t) => {

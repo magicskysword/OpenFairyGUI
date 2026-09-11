@@ -127,7 +127,8 @@ export function editComponentXml(
 		}
 	} else {
 		const fragment = operation.xml ?? '';
-		if (new TextEncoder().encode(fragment).byteLength > 1024 * 1024) throw new DocumentEditError('XML_LIMIT_EXCEEDED', 'XML 超过 1 MiB');
+		if (new TextEncoder().encode(fragment).byteLength > 1024 * 1024)
+			throw new DocumentEditError('XML_LIMIT_EXCEEDED', 'XML 超过 1 MiB');
 		const fragmentRoot = find(parse(`<fragment>${fragment}</fragment>`, false), 'fragment')!;
 		const entries = childrenOf(fragmentRoot).filter((entry) => !tagOf(entry).startsWith('#'));
 		if (!entries.length) throw new DocumentEditError('INVALID_XML', 'XML 片段不能为空');

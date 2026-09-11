@@ -1,23 +1,53 @@
 import test from 'ava';
 import path from 'node:path';
-import { ProjectWriter, Document, type FileSystem, type GTextField, type GGraph } from '@magicskysword/openfairygui-core';
+import {
+	ProjectWriter,
+	Document,
+	type FileSystem,
+	type GTextField,
+	type GGraph,
+} from '@magicskysword/openfairygui-core';
 import { captureProjectSnapshot, prepareSnapshotEdits } from '../src/project-snapshot.js';
 
-test('XML attribute edits resolve native selectors with explicit match counts', async t => {
+test('XML attribute edits resolve native selectors with explicit match counts', async (t) => {
 	const { fs } = await fixture();
-	const result = await prepareSnapshotEdits(await captureProjectSnapshot(fs, '/project/project.fairy'), [{ op: 'xml', action: 'attributes', target: { kind: 'node', packageId: 'package1', componentId: 'panel', selector: 'GTextField', expectedMatches: 1 }, attributes: { text: 'Selected' } }]);
+	const result = await prepareSnapshotEdits(await captureProjectSnapshot(fs, '/project/project.fairy'), [
+		{
+			op: 'xml',
+			action: 'attributes',
+			target: {
+				kind: 'node',
+				packageId: 'package1',
+				componentId: 'panel',
+				selector: 'GTextField',
+				expectedMatches: 1,
+			},
+			attributes: { text: 'Selected' },
+		},
+	]);
 	const root = (await result.snapshot.readDocument()).getRoot().listPackages()[0]!.listComponents()[0]!;
 	t.is((root.getChildById('n0') as GTextField).getText(), 'Selected');
 	t.is(result.operationResults[0]!.targets[0]!.nodeId, 'n0');
 });
 
-test('mixed batch errors retain the original operation index', async t => {
+test('mixed batch errors retain the original operation index', async (t) => {
 	const { fs } = await fixture();
 	const source = await captureProjectSnapshot(fs, '/project/project.fairy');
-	const error = await t.throwsAsync(() => prepareSnapshotEdits(source, [
-		{ op: 'xml', action: 'insert', target: { kind: 'component', packageId: 'package1', componentId: 'panel' }, xml: '<graph id="new"/>' },
-		{ op: 'update', target: { kind: 'node', packageId: 'package1', componentId: 'panel', nodeId: 'n0' }, props: { x: 'invalid' } },
-	]));
+	const error = await t.throwsAsync(() =>
+		prepareSnapshotEdits(source, [
+			{
+				op: 'xml',
+				action: 'insert',
+				target: { kind: 'component', packageId: 'package1', componentId: 'panel' },
+				xml: '<graph id="new"/>',
+			},
+			{
+				op: 'update',
+				target: { kind: 'node', packageId: 'package1', componentId: 'panel', nodeId: 'n0' },
+				props: { x: 'invalid' },
+			},
+		]),
+	);
 	t.is((error as { path?: string }).path, 'operations[1].props.x');
 });
 
@@ -186,7 +216,7 @@ test('native controllers, gears, transitions and XML batch references roundtrip 
 	t.is(component.getController('state')!.listPages().length, 2);
 	t.is(component.getChildById('n0')!.listGears()[0]!.getValues(), '0,0|100,20');
 	t.is(component.getTransition('enter')!.listItems()[0]!.getTargetId(), 'n0');
-	t.true(result.affectedReferences.some(edge => edge.source.transition === 'enter' && edge.field === 'targetId'));
+	t.true(result.affectedReferences.some((edge) => edge.source.transition === 'enter' && edge.field === 'targetId'));
 	t.is((component.getChildById(result.clientRefs.box!.nodeId!) as GGraph).getX(), 40);
 });
 
