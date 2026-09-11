@@ -7,6 +7,7 @@ import {
 	compareProjectDiagnostics,
 	blockingProjectDiagnostics,
 	resolveBatchProperties,
+	resolveAuthoringTarget,
 	DocumentEditError,
 	editComponentXml,
 	serializeAffectedProjectFiles,
@@ -363,6 +364,7 @@ export async function prepareSnapshotEdits(
 	operationResults: Array<{ index: number; op: string; targets: AuthoringTarget[] }>;
 	diagnostics: ReturnType<typeof compareProjectDiagnostics>;
 	affectedReferences: ReturnType<typeof buildProjectReferenceGraph>['edges'];
+	xmlFindings: Array<{ index: number; target: AuthoringTarget; findings: ReturnType<typeof editComponentXml>['findings'] }>;
 }> {
 	if (!operations.length || operations.length > 200)
 		throw new DocumentEditError('INVALID_EDIT', '编辑批次必须包含 1 至 200 项操作');
@@ -375,6 +377,7 @@ export async function prepareSnapshotEdits(
 	const changes = new Map<string, SnapshotChange>();
 	const affected: ProjectFileTarget[] = [];
 	const operationResults: Array<{ index: number; op: string; targets: AuthoringTarget[] }> = [];
+	const xmlFindings: Array<{ index: number; target: AuthoringTarget; findings: ReturnType<typeof editComponentXml>['findings'] }> = [];
 	const imports = new Map<string, AuthoringImportData>();
 	const inboxPaths = new Set<string>();
 	for (const [index, operation] of operations.entries()) {
@@ -427,8 +430,20 @@ export async function prepareSnapshotEdits(
 					},
 				])
 			)[0]!;
-			let result: ReturnType<typeof editComponentXml>;
-			try { result = editComponentXml(file.content, operation); }
+			const { selector, expectedMatches, ...stableTarget } = operation.target;
+			const targets = operation.target.kind === 'node' ? resolveAuthoringTarget(document, operation.target).map(owner => ({ ...stableTarget, nodeId: (owner as Property & { getId(): string }).getId() })) : [stableTarget];
+			let result = { xml: file.content, idMap: {} as Record<string, string> };
+			try {
+				for (const target of targets) {
+					const edited = editComponentXml(result.xml, { ...operation, target });
+					for (const [label, nodeId] of Object.entries(edited.idMap)) {
+						if (Object.hasOwn(result.idMap, label)) throw new DocumentEditError('INVALID_CLIENT_REF', '多个 XML 目标产生了重复局部标签', 'xml', label);
+						result.idMap[label] = nodeId;
+					}
+					result.xml = edited.xml;
+					xmlFindings.push({ index, target, findings: edited.findings });
+				}
+			}
 			catch (error) {
 				if (error instanceof DocumentEditError) throw new DocumentEditError(error.code, error.message, `operations[${index}]${error.path ? '.' + error.path : '.xml'}`, error.details);
 				throw error;
@@ -444,9 +459,9 @@ export async function prepareSnapshotEdits(
 						`operations[${index}].xml`,
 						label,
 					);
-				clientRefs[label] = { ...operation.target, kind: 'node', nodeId };
+				clientRefs[label] = { kind: 'node', packageId: operation.target.packageId, componentId: operation.target.componentId, nodeId };
 			}
-			operationResults.push({ index, op: 'xml', targets: [operation.target] });
+			operationResults.push({ index, op: 'xml', targets });
 			index++;
 		} else {
 			const start = index;
@@ -537,5 +552,5 @@ export async function prepareSnapshotEdits(
 		const targetMatches = edge.target.packageId === target.packageId && (target.kind === 'package' || (target.kind === 'resource' ? edge.target.kind === 'resource' && edge.target.id === target.resourceId : edge.target.componentId === target.componentId || (edge.target.kind === 'resource' && edge.target.id === target.componentId)));
 		return sourceMatches || targetMatches;
 	})).map(edge => [JSON.stringify(edge), edge])).values()];
-	return { snapshot, changes: [...changes.values()], clientRefs, operationResults, diagnostics, affectedReferences };
+	return { snapshot, changes: [...changes.values()], clientRefs, operationResults, diagnostics, affectedReferences, xmlFindings };
 }

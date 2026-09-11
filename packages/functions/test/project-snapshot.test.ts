@@ -3,6 +3,14 @@ import path from 'node:path';
 import { ProjectWriter, Document, type FileSystem, type GTextField, type GGraph } from '@magicskysword/openfairygui-core';
 import { captureProjectSnapshot, prepareSnapshotEdits } from '../src/project-snapshot.js';
 
+test('XML attribute edits resolve native selectors with explicit match counts', async t => {
+	const { fs } = await fixture();
+	const result = await prepareSnapshotEdits(await captureProjectSnapshot(fs, '/project/project.fairy'), [{ op: 'xml', action: 'attributes', target: { kind: 'node', packageId: 'package1', componentId: 'panel', selector: 'GTextField', expectedMatches: 1 }, attributes: { text: 'Selected' } }]);
+	const root = (await result.snapshot.readDocument()).getRoot().listPackages()[0]!.listComponents()[0]!;
+	t.is((root.getChildById('n0') as GTextField).getText(), 'Selected');
+	t.is(result.operationResults[0]!.targets[0]!.nodeId, 'n0');
+});
+
 test('mixed batch errors retain the original operation index', async t => {
 	const { fs } = await fixture();
 	const source = await captureProjectSnapshot(fs, '/project/project.fairy');
