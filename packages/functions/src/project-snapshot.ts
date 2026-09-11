@@ -5,6 +5,7 @@ import {
 	readAuthoringProperties,
 	buildProjectReferenceGraph,
 	compareProjectDiagnostics,
+	blockingProjectDiagnostics,
 	DocumentEditError,
 	editComponentXml,
 	serializeAffectedProjectFiles,
@@ -327,6 +328,7 @@ export async function prepareSnapshotEdits(
 	const baseline = buildProjectReferenceGraph(document).diagnostics;
 	const clientRefs: Record<string, AuthoringTarget> = {};
 	const changes = new Map<string, SnapshotChange>();
+	const affected: ProjectFileTarget[] = [];
 	const operationResults: Array<{ index: number; op: string; targets: AuthoringTarget[] }> = [];
 	const imports = new Map<string, AuthoringImportData>();
 	const inboxPaths = new Set<string>();
@@ -366,6 +368,11 @@ export async function prepareSnapshotEdits(
 				operation.target[field] = clientRefs[value.slice(1)]![field];
 		}
 		if (operation.op === 'xml') {
+			affected.push({
+				kind: 'component',
+				packageId: operation.target.packageId!,
+				componentId: operation.target.componentId!,
+			});
 			const file = (
 				await serializeAffectedProjectFiles(document, [
 					{
@@ -406,6 +413,7 @@ export async function prepareSnapshotEdits(
 				index++;
 			}
 			const result = applyDocumentEdits(document, batch, { imports });
+			affected.push(...result.affected);
 			const before = await serializeAffectedProjectFiles(document, existingTargets(document, result.affected));
 			const after = await serializeAffectedProjectFiles(
 				result.document,
@@ -436,13 +444,9 @@ export async function prepareSnapshotEdits(
 		document = await snapshot.readDocument();
 	}
 	const diagnostics = compareProjectDiagnostics(baseline, buildProjectReferenceGraph(document).diagnostics);
-	if (diagnostics.added.some((item) => item.severity === 'error'))
-		throw new DocumentEditError(
-			'REFERENCE_VALIDATION_FAILED',
-			'编辑产生了无效引用或身份冲突',
-			undefined,
-			diagnostics.added,
-		);
+	const blocking = blockingProjectDiagnostics(diagnostics, affected);
+	if (blocking.length)
+		throw new DocumentEditError('REFERENCE_VALIDATION_FAILED', '编辑产生了无效引用或身份冲突', undefined, blocking);
 	const consumed = [...inboxPaths].map((relativePath) => ({ relativePath }));
 	for (const change of consumed) changes.set(change.relativePath, change);
 	if (consumed.length) snapshot = await snapshot.withChanges(consumed);

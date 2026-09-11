@@ -3,6 +3,30 @@ import path from 'node:path';
 import { ProjectWriter, Document, type FileSystem, type GTextField } from '@magicskysword/openfairygui-core';
 import { captureProjectSnapshot, prepareSnapshotEdits } from '../src/project-snapshot.js';
 
+test('XML edits also reject errors within their affected component scope', async (t) => {
+	const { fs, files } = await fixture();
+	const componentPath = '/project/assets/UI/Panel.xml';
+	files.set(
+		componentPath,
+		new TextEncoder().encode(
+			(await fs.readFile(componentPath)).replace('<component ', '<component mask="missing" '),
+		),
+	);
+	const snapshot = await captureProjectSnapshot(fs, '/project/project.fairy');
+	await t.throwsAsync(
+		() =>
+			prepareSnapshotEdits(snapshot, [
+				{
+					op: 'xml',
+					action: 'attributes',
+					target: { kind: 'node', packageId: 'package1', componentId: 'panel', nodeId: 'n0' },
+					attributes: { text: 'changed' },
+				},
+			]),
+		{ code: 'REFERENCE_VALIDATION_FAILED' },
+	);
+});
+
 test('native controllers, gears, transitions and XML batch references roundtrip together', async (t) => {
 	const { fs } = await fixture();
 	const snapshot = await captureProjectSnapshot(fs, '/project/project.fairy');
