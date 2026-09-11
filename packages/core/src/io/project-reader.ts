@@ -86,7 +86,25 @@ function readJpegSize(data: Uint8Array): { width: number; height: number } | nul
 }
 
 export function readImageSize(data: Uint8Array): { width: number; height: number } | null {
-	return readPngSize(data) ?? readJpegSize(data);
+	const standard = readPngSize(data) ?? readJpegSize(data);
+	if (standard) return standard.width > 0 && standard.height > 0 ? standard : null;
+	const ascii = (start: number, end: number) => String.fromCharCode(...data.subarray(start, end));
+	if (data.length >= 25 && ascii(0, 4) === 'RIFF' && ascii(8, 12) === 'WEBP') {
+		const chunk = ascii(12, 16);
+		if (chunk === 'VP8X' && data.length >= 30) return { width: 1 + data[24]! + (data[25]! << 8) + (data[26]! << 16), height: 1 + data[27]! + (data[28]! << 8) + (data[29]! << 16) };
+		if (chunk === 'VP8L' && data[20] === 0x2f) return { width: 1 + data[21]! + ((data[22]! & 0x3f) << 8), height: 1 + (data[22]! >> 6) + (data[23]! << 2) + ((data[24]! & 0x0f) << 10) };
+		if (chunk === 'VP8 ' && data.length >= 30 && data[23] === 0x9d && data[24] === 1 && data[25] === 0x2a) return { width: (data[26]! | data[27]! << 8) & 0x3fff, height: (data[28]! | data[29]! << 8) & 0x3fff };
+	}
+	const header = new TextDecoder().decode(data.subarray(0, Math.min(data.length, 65536)));
+	if (/<!\s*(DOCTYPE|ENTITY)/i.test(header)) return null;
+	const svg = /<svg\b([^>]*)>/i.exec(header);
+	if (!svg) return null;
+	const attrs = svg[1]!;
+	const width = /\bwidth\s*=\s*["']([\d.]+)(?:px)?["']/i.exec(attrs);
+	const height = /\bheight\s*=\s*["']([\d.]+)(?:px)?["']/i.exec(attrs);
+	const viewBox = /\bviewBox\s*=\s*["']([^"']+)["']/i.exec(attrs)?.[1]?.trim().split(/[\s,]+/).map(Number);
+	const size = { width: width ? Number(width[1]) : viewBox?.[2] ?? 0, height: height ? Number(height[1]) : viewBox?.[3] ?? 0 };
+	return Number.isFinite(size.width) && Number.isFinite(size.height) && size.width > 0 && size.height > 0 ? size : null;
 }
 
 // Maps XML tag names for display objects to factory method names.

@@ -1,4 +1,21 @@
 import test from 'ava';
+import { readImageSize } from '../src/io/project-reader.js';
+
+test('image import metadata recognizes WebP and SVG intrinsic dimensions', (t) => {
+	const bytes = new Uint8Array(30);
+	bytes.set(new TextEncoder().encode('RIFF'), 0);
+	bytes.set(new TextEncoder().encode('WEBPVP8X'), 8);
+	bytes[20] = 0;
+	bytes[24] = 19;
+	bytes[27] = 9;
+	t.deepEqual(readImageSize(bytes), { width: 20, height: 10 });
+	t.deepEqual(
+		readImageSize(new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="16"/>')),
+		{ width: 32, height: 16 },
+	);
+	t.deepEqual(readImageSize(new TextEncoder().encode('<svg viewBox="0 0 80 40"/>')), { width: 80, height: 40 });
+	t.is(readImageSize(new TextEncoder().encode('<!DOCTYPE svg><svg width="32" height="16"/>')), null);
+});
 import { Document, applyDocumentEdits, readAuthoringProperties, type MiscResource } from '../src/index.js';
 
 function fixture() {
