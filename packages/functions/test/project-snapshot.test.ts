@@ -3,6 +3,79 @@ import path from 'node:path';
 import { ProjectWriter, Document, type FileSystem, type GTextField } from '@magicskysword/openfairygui-core';
 import { captureProjectSnapshot, prepareSnapshotEdits } from '../src/project-snapshot.js';
 
+test('all ten Gear types and scoped page patches survive native snapshot roundtrip', async (t) => {
+	const { fs } = await fixture();
+	const base = { packageId: 'package1', componentId: 'panel' };
+	const operations: Parameters<typeof prepareSnapshotEdits>[1][number][] = [
+		{ op: 'create', target: { ...base, kind: 'controller' }, props: { name: 'mode' } },
+		{ op: 'create', target: { ...base, kind: 'page', controllerName: 'mode' }, props: { name: 'first' } },
+		{ op: 'create', target: { ...base, kind: 'page', controllerName: 'mode' }, props: { name: 'second' } },
+	];
+	const types = [
+		'GTextField',
+		'GTextField',
+		'GTextField',
+		'GTextField',
+		'GTextField',
+		'GMovieClip',
+		'GTextField',
+		'GLoader',
+		'GTextField',
+		'GTextField',
+	];
+	const values = [
+		'',
+		'0,0|10,20',
+		'10,20,1,1|30,40,1,1',
+		'1,0,0,1|0.5,20,0,1',
+		'#ff0000,#000000|#00ff00,#000000',
+		'0,true|1,false',
+		'A|B',
+		'|',
+		'',
+		'12|16',
+	];
+	for (let type = 0; type < 10; type++) {
+		operations.push({
+			op: 'create',
+			target: { ...base, kind: 'node' },
+			type: types[type]!,
+			clientRef: `node${type}`,
+			props: { name: `gear${type}` },
+		});
+		operations.push({
+			op: 'create',
+			target: { ...base, kind: 'gear', nodeId: `@node${type}`, controllerName: 'mode' },
+			props: { gearType: type, pages: '0,1', values: values[type]! },
+		});
+	}
+	const initial = await prepareSnapshotEdits(await captureProjectSnapshot(fs, '/project/project.fairy'), operations);
+	const patched = await prepareSnapshotEdits(initial.snapshot, [
+		{
+			op: 'update',
+			target: { ...base, kind: 'node', nodeId: initial.clientRefs.node1!.nodeId },
+			scope: { controller: 'mode', pageId: '1' },
+			props: { x: 80 },
+		},
+		{
+			op: 'update',
+			target: { ...base, kind: 'node', nodeId: initial.clientRefs.node3!.nodeId },
+			scope: { controller: 'mode', allPages: true },
+			props: { alpha: 0.25 },
+		},
+	]);
+	const root = (await patched.snapshot.readDocument()).getRoot().listPackages()[0]!.listComponents()[0]!;
+	t.is(root.getChildById(initial.clientRefs.node1!.nodeId!)!.listGears()[0]!.getValues(), '0,0|80,20');
+	t.true(
+		root
+			.getChildById(initial.clientRefs.node3!.nodeId!)!
+			.listGears()[0]!
+			.getValues()
+			.split('|')
+			.every((v) => v.startsWith('0.25,')),
+	);
+});
+
 test('XML edits also reject errors within their affected component scope', async (t) => {
 	const { fs, files } = await fixture();
 	const componentPath = '/project/assets/UI/Panel.xml';

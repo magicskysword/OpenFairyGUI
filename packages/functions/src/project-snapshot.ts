@@ -231,6 +231,48 @@ function canonicalState(value: unknown): unknown {
 
 function modelState(owner: Property): unknown {
 	const props = readAuthoringProperties(owner);
+	if (owner.propertyType === 'Gear') {
+		const type = Number(props.gearType);
+		const normalize = (value: unknown): unknown => {
+			if (value === null || value === undefined || value === '-' || value === '') return value;
+			if ([0, 6, 7, 8].includes(type)) return value;
+			return String(value)
+				.split('|')
+				.map((segment) => {
+					if (segment === '-') return segment;
+					const parts = segment.split(',');
+					if (type === 2) {
+						parts[2] ??= '1';
+						parts[3] ??= '1';
+					}
+					if (type === 3) {
+						parts[2] ??= '0';
+						parts[3] ??= '1';
+					}
+					if (type === 4) {
+						parts[1] ??= '#000000';
+						return parts.map((part) => part.toLowerCase());
+					}
+					return parts.map((part) =>
+						part === 'true'
+							? 1
+							: part === 'false'
+								? 0
+								: Number.isFinite(Number(part))
+									? Number(part)
+									: part,
+					);
+				});
+		};
+		props.values = normalize(props.values);
+		props.defaultValue = normalize(props.defaultValue);
+		props.pageValues = Object.fromEntries(
+			Object.entries(props.pageValues as Record<string, unknown>).map(([page, value]) => [
+				page,
+				normalize(value),
+			]),
+		);
+	}
 	// 空发布名与包名回退在工程格式中具有相同的有效值。
 	if (owner.propertyType === 'Package' && !props.publishName) props.publishName = owner.getName();
 	// 动效值以 XML 文本元组保存，数值与对应的数值文本具有相同语义。
