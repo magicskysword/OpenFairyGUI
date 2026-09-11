@@ -12,6 +12,12 @@ function fixture() {
 	return { document, component };
 }
 
+test('selector batch results list every affected target in document order', t => {
+	const { document, component } = fixture(); component.addChild(document.createGTextField('second').setId('n1'));
+	const result = applyDocumentEdits(document, [{ op: 'update', target: { kind: 'node', packageId: 'package1', componentId: 'panel', selector: 'GTextField', expectedMatches: 2 }, props: { x: 20 } }]);
+	t.deepEqual(result.operationResults[0]!.targets.map(target => target.nodeId), ['n0', 'n1']);
+});
+
 test('native text strokeColor edits use the Color Gear page scope', t => {
 	const { document, component } = fixture();
 	const controller = document.createController('state'); controller.addPage(document.createControllerPage('a').setId('0')); component.addController(controller);

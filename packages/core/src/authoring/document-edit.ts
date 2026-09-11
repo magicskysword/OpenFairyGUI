@@ -706,6 +706,8 @@ export function applyDocumentEdits(
 	operations.forEach((operation, index) => {
 		try {
 			const target = resolve(operation.target);
+			const originalTarget = { ...target };
+			const resolvedTargets: AuthoringTarget[] = [];
 			const { pkg, component } = locateOwner(document, target);
 			if (['package', 'resource', 'component'].includes(target.kind)) {
 				if (operation.props?.name !== undefined) assertAuthoringName(String(operation.props.name));
@@ -851,7 +853,9 @@ export function applyDocumentEdits(
 				if (operation.clientRef) clientRefs[operation.clientRef] = { ...target };
 			} else {
 				objects = resolveAuthoringTarget(document, target);
+				if (operation.clientRef && objects.length !== 1) throw new DocumentEditError('INVALID_CLIENT_REF', 'clientRef 需要唯一的新对象', 'clientRef');
 				for (const object of objects) {
+					Object.assign(target, originalTarget);
 					if (target.kind === 'node') target.nodeId = (object as GObject).getId();
 					if (['remove', 'replace', 'move'].includes(operation.op)) {
 						const identity = referenceTarget(target);
@@ -991,6 +995,7 @@ export function applyDocumentEdits(
 								object as GObject,
 								operation.toIndex ?? component.listChildren().length - 1,
 							);
+							resolvedTargets.push({ ...target });
 							continue;
 						}
 						if (operation.op === 'move') {
@@ -1092,10 +1097,11 @@ export function applyDocumentEdits(
 					} else if (operation.op === 'move' && target.kind === 'node')
 						component!.moveChild(object as GObject, operation.toIndex!);
 					else throw new DocumentEditError('INVALID_EDIT', `目标不支持操作：${operation.op}`);
+					resolvedTargets.push({ ...target });
 				}
 			}
 			touch(target);
-			operationResults.push({ index, op: operation.op, targets: [{ ...target }] });
+			operationResults.push({ index, op: operation.op, targets: resolvedTargets.length ? resolvedTargets : [{ ...target }] });
 		} catch (error) {
 			if (error instanceof DocumentEditError)
 				throw new DocumentEditError(
