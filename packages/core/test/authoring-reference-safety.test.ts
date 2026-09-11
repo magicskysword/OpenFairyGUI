@@ -21,6 +21,40 @@ function fixture() {
 	return { document, pkg, component, node, controller };
 }
 
+test('resource variant and font texture dependencies participate in deletion and migration checks', (t) => {
+	const f = fixture();
+	const base = f.document.createImageResource('Base').setId('base').setHighResolutionItemIds(['high']);
+	const high = f.document.createImageResource('High').setId('high');
+	const font = f.document.createFontResource('Font').setId('font').setTextureId('base');
+	f.pkg.addResource(base).addResource(high).addResource(font);
+	const target = { kind: 'resource' as const, packageId: 'package1', resourceId: 'high' };
+	t.throws(() => applyDocumentEdits(f.document, [{ op: 'remove', target }]), { code: 'DEPENDENCY_EXISTS' });
+	const removed = applyDocumentEdits(f.document, [{ op: 'remove', target, cascade: true }]);
+	t.deepEqual(
+		(
+			removed.document.getRoot().listPackages()[0]!.getResourceById('base') as typeof base
+		).getHighResolutionItemIds(),
+		[null],
+	);
+	f.document.createPackage('Other').setId('package2');
+	t.throws(
+		() =>
+			applyDocumentEdits(f.document, [
+				{
+					op: 'move',
+					target: { ...target, resourceId: 'base' },
+					destination: { kind: 'package', packageId: 'package2' },
+				},
+			]),
+		{ code: 'UNSAFE_REFERENCE' },
+	);
+	t.is(
+		buildProjectReferenceGraph(f.document).find({ kind: 'resource', packageId: 'package1', id: 'base' })[0]!.source
+			.resourceId,
+		'font',
+	);
+});
+
 test('unknown XML references block identity-changing operations while scalar updates preserve them', (t) => {
 	const f = fixture();
 	f.component.setExtras({

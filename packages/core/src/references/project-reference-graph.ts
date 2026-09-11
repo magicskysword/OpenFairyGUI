@@ -16,6 +16,7 @@ export interface ProjectReferenceTarget {
 export interface ProjectReferenceSource {
 	packageId: string;
 	componentId: string;
+	resourceId?: string;
 	nodeId?: string;
 	controller?: string;
 	transition?: string;
@@ -227,6 +228,33 @@ export function buildProjectReferenceGraph(document: Document): ProjectReference
 				resourceEdges(entry, source, `${field}.${key}`, cascade, expectedType);
 	};
 	for (const pkg of document.getRoot().listPackages()) {
+		for (const resource of pkg.listResources()) {
+			const source = { packageId: pkg.getId(), componentId: resource.getId(), resourceId: resource.getId() };
+			const texture = stringGetter(resource, 'getTextureId');
+			if (texture)
+				edges.push({
+					source,
+					target: { kind: 'resource', packageId: pkg.getId(), id: texture },
+					field: 'textureId',
+					cascade: 'clear-field',
+					expectedType: PropertyType.IMAGE_RESOURCE,
+				});
+			for (const key of ['branchItemIds', 'highResolutionItemIds']) {
+				const getter = (resource as unknown as Record<string, unknown>)[
+					`get${key[0]!.toUpperCase()}${key.slice(1)}`
+				];
+				const ids = typeof getter === 'function' ? (getter.call(resource) as Array<string | null>) : [];
+				for (const [index, id] of ids.entries())
+					if (id)
+						edges.push({
+							source,
+							target: { kind: 'resource', packageId: pkg.getId(), id },
+							field: `${key}[${index}]`,
+							cascade: 'clear-field',
+							expectedType: resource.propertyType,
+						});
+			}
+		}
 		for (const component of pkg.listComponents()) {
 			const scope = { packageId: pkg.getId(), componentId: component.getId() };
 			const nodeEdge = (

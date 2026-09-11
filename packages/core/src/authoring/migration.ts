@@ -90,6 +90,8 @@ export function mapNodeScope(
 
 function edgeOwner(document: Document, edge: ProjectReferenceEdge): Property {
 	const source = edge.source;
+	if (source.resourceId)
+		return document.getRoot().getPackageById(source.packageId)!.getResourceById(source.resourceId)!;
 	const component = document
 		.getRoot()
 		.getPackageById(source.packageId)!
@@ -116,6 +118,8 @@ export function rewriteResourceReferences(
 	const oldURL = `ui://${from.packageId}${from.id}`;
 	const newURL = `ui://${to.packageId}${to.id}`;
 	for (const edge of edges) {
+		if (edge.source.resourceId && from.packageId !== to.packageId)
+			throw new DocumentEditError('UNSAFE_REFERENCE', '包内资源变体或字体纹理引用无法跨包表达', edge.field, edge);
 		if (edge.cascade === 'unsupported')
 			throw new DocumentEditError('UNSAFE_REFERENCE', '资源引用无法安全迁移', edge.field, edge);
 		const owner = edgeOwner(document, edge);

@@ -382,7 +382,10 @@ function updateNode(node: GObject, props: Record<string, unknown>, scope?: Autho
 		);
 		if (!gear) throw new DocumentEditError('GEAR_NOT_FOUND', `属性 ${key} 未绑定到控制器 ${scope.controller}`);
 		const controller = gear.getController()!;
-		const selected = 'allPages' in scope ? [...new Set([...gear.getPages().split(',').filter(Boolean), ...Object.keys(gear.getPageValues())])] : [scope.pageId];
+		const selected =
+			'allPages' in scope
+				? [...new Set([...gear.getPages().split(',').filter(Boolean), ...Object.keys(gear.getPageValues())])]
+				: [scope.pageId];
 		if (selected.some((id) => !controller.listPages().some((p) => p.getId() === id)))
 			throw new DocumentEditError('PAGE_NOT_FOUND', '控制器页面不存在');
 		const fields = gearFields[gear.getGearType()]!;
@@ -467,6 +470,18 @@ function uniqueCascades(dependencies: ProjectReferenceEdge[]): ProjectReferenceE
 }
 function clearReference(document: Document, edge: ProjectReferenceEdge, removing = new Set<Property>()): void {
 	const source = edge.source;
+	if (source.resourceId) {
+		const resource = document.getRoot().getPackageById(source.packageId)?.getResourceById(source.resourceId);
+		if (!resource) return;
+		const array = /^(branchItemIds|highResolutionItemIds)\[(\d+)\]$/.exec(edge.field);
+		if (array) {
+			const values = invoke(resource, `get${suffix(array[1]!)}`) as Array<string | null>;
+			values[Number(array[2])] = array[1] === 'highResolutionItemIds' ? null : '';
+			invoke(resource, `set${suffix(array[1]!)}`, values);
+		} else if (edge.field === 'textureId') invoke(resource, 'setTextureId', '');
+		else throw new DocumentEditError('UNSAFE_REFERENCE', '资源引用无法安全清理', edge.field, edge);
+		return;
+	}
 	const component = document
 		.getRoot()
 		.getPackageById(source.packageId)!
@@ -887,7 +902,7 @@ export function applyDocumentEdits(
 						for (const edge of unique) {
 							clearReference(document, edge);
 							touch({
-								kind: 'component',
+								kind: edge.source.resourceId ? 'resource' : 'component',
 								packageId: edge.source.packageId,
 								componentId: edge.source.componentId,
 							});
@@ -1041,7 +1056,7 @@ export function applyDocumentEdits(
 						);
 						for (const edge of edges)
 							touch({
-								kind: 'component',
+								kind: edge.source.resourceId ? 'resource' : 'component',
 								packageId: edge.source.packageId,
 								componentId: edge.source.componentId,
 							});
