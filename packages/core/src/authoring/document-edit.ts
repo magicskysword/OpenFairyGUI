@@ -179,6 +179,17 @@ export function readAuthoringProperties(owner: Property): Record<string, unknown
 			}
 		}
 	}
+	if (owner.propertyType === PropertyType.GEAR) {
+		const gear = owner as Gear;
+		const values = gear.getValues().split('|');
+		result.pageValues = Object.fromEntries(
+			gear
+				.getPages()
+				.split(',')
+				.filter(Boolean)
+				.map((page, index) => [page, values[index] === '-' ? null : (values[index] ?? null)]),
+		);
+	}
 	return result;
 }
 
@@ -256,6 +267,14 @@ export function setAuthoringProperties(owner: Property, props: Record<string, un
 		const setter = `set${suffix(key)}`;
 		if (typeof asMutable(owner)[setter] === 'function') invoke(owner, setter, current[key]);
 		else if (pair) invoke(owner, pair[0], current[pair[1]], current[pair[2]], current.pivotAsAnchor ?? false);
+	}
+	if (owner.propertyType === PropertyType.GEAR && Object.hasOwn(props, 'pageValues')) {
+		const gear = owner as Gear;
+		const pages = Object.keys(current.pageValues as Record<string, unknown>);
+		const values = Object.values(current.pageValues as Record<string, unknown>).map((value) =>
+			value === null ? '-' : Array.isArray(value) ? value.join(',') : String(value),
+		);
+		gear.setPages(pages.join(',')).setValues(values.join('|')).setPageValues({});
 	}
 }
 

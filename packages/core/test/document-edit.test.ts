@@ -94,6 +94,33 @@ test('controlled properties require an explicit edit scope', (t) => {
 	t.is(readAuthoringProperties(node).x, 5);
 });
 
+test('structured Gear page values update the serialized tuples and query projection', (t) => {
+	const { document, component } = fixture();
+	const controller = document.createController('state');
+	component.addController(controller);
+	for (const id of ['0', '1']) controller.addPage(document.createControllerPage(id).setId(id));
+	component
+		.getChildById('n0')!
+		.addGear(
+			document
+				.createGear()
+				.setController(controller)
+				.setGearType(GearType.XY)
+				.setPages('0,1')
+				.setValues('0,0|10,20'),
+		);
+	const result = applyDocumentEdits(document, [
+		{
+			op: 'update',
+			target: { kind: 'gear', packageId: 'package1', componentId: 'panel', nodeId: 'n0', index: 0 },
+			props: { pageValues: { '1': [30, 40] } },
+		},
+	]);
+	const gear = result.document.getRoot().listPackages()[0]!.listComponents()[0]!.getChildById('n0')!.listGears()[0]!;
+	t.is(gear.getValues(), '0,0|30,40');
+	t.deepEqual(readAuthoringProperties(gear).pageValues, { '0': '0,0', '1': '30,40' });
+});
+
 test('removal rejects dependencies and supports explicit cascades', (t) => {
 	const { document, component } = fixture();
 	component.setMask('n0');
