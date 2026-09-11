@@ -229,7 +229,7 @@ export {
 export { editComponentXml, readComponentXmlFragment, type XmlFragmentOperation } from './authoring/xml-fragment-edit.js';
 export {
 	cloneDocument, readAuthoringProperties, setAuthoringProperties, resolveAuthoringTarget, applyDocumentEdits, DocumentEditError,
-	type AuthoringTarget, type AuthoringScope, type DocumentEditOperation, type DocumentEditResult,
+	type AuthoringTarget, type AuthoringScope, type DocumentEditOperation, type DocumentEditResult, type AuthoringImportData,
 } from './authoring/document-edit.js';
 export {
 	buildProjectReferenceGraph, compareProjectDiagnostics, projectReferenceKey,

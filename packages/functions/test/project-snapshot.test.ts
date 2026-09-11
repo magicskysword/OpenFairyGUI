@@ -1,6 +1,6 @@
 import test from 'ava';
 import path from 'node:path';
-import { ProjectWriter, Document, type FileSystem } from '@magicskysword/openfairygui-core';
+import { ProjectWriter, Document, type FileSystem, type GTextField } from '@magicskysword/openfairygui-core';
 import { captureProjectSnapshot, prepareSnapshotEdits } from '../src/project-snapshot.js';
 
 async function fixture() {
@@ -78,7 +78,7 @@ test('mixed native and XML edits prepare a new immutable snapshot without writes
 	t.is(await fs.readFile('/project/assets/UI/Panel.xml'), before);
 	const component = (await result.snapshot.readDocument()).getRoot().listPackages()[0]!.listComponents()[0]!;
 	t.is(component.listChildren().length, 2);
-	t.is((component.getChildById('n0') as { getText(): string }).getText(), 'Updated');
+	t.is((component.getChildById('n0') as GTextField).getText(), 'Updated');
 	t.not(result.snapshot.fingerprint, snapshot.fingerprint);
 });
 
