@@ -1,6 +1,6 @@
 import { XMLBuilder, XMLParser, XMLValidator } from 'fast-xml-parser';
 import { generateChildId } from '../utils/id-utils.js';
-import { inspectOpaqueProjectXml } from '../io/opaque-project-xml.js';
+import { inspectOpaqueProjectXml, findOpaqueProjectXmlReferences } from '../io/opaque-project-xml.js';
 import { DocumentEditError, type AuthoringTarget } from './document-edit.js';
 
 export interface XmlFragmentOperation {
@@ -131,6 +131,21 @@ export function editComponentXml(
 		if (!entries.length) throw new DocumentEditError('INVALID_XML', 'XML 片段不能为空');
 		if (operation.action === 'replace' && entries.length !== 1)
 			throw new DocumentEditError('INVALID_XML', '替换要求单一根元素');
+		if (operation.action === 'replace') {
+			const tag = tagOf(entries[0]!);
+			const valid =
+				operation.target.kind === 'node'
+					? displayTags.has(tag)
+					: operation.target.kind === 'gear'
+						? tag.startsWith('gear')
+						: operation.target.kind === 'transition-item'
+							? tag === 'item'
+							: operation.target.kind === 'controller-action'
+								? tag === 'action'
+								: tag === operation.target.kind;
+			if (!valid) throw new DocumentEditError('INVALID_XML_TARGET', '替换结构与目标类型不匹配', 'xml');
+		}
+		const originalEntries = structuredClone(entries);
 		const displayList = find(childrenOf(root), 'displayList');
 		const existingIds = new Set(
 			(displayList ? childrenOf(displayList) : [])
@@ -169,9 +184,67 @@ export function editComponentXml(
 				);
 		}
 		const mapping = { ...operation.bindings, ...idMap };
+		const pageMappings = new Map<string, Map<string, string>>();
+		const allocatePages = (entry: Entry): void => {
+			if (tagOf(entry) === 'controller') {
+				const attrs = attrsOf(entry);
+				const name = String(attrs.name ?? '');
+				const tokens = String(attrs.pages ?? '')
+					.split(',')
+					.filter(Boolean);
+				if (tokens.length % 2)
+					throw new DocumentEditError('INVALID_XML', '控制器页面需要 ID 与名称成对出现', 'xml');
+				const previous = find(
+					childrenOf(root),
+					'controller',
+					'name',
+					operation.target.kind === 'controller' ? operation.target.controllerName : name,
+				);
+				const existing = new Set(
+					String(previous ? (attrsOf(previous).pages ?? '') : '')
+						.split(',')
+						.filter((_, index) => index % 2 === 0),
+				);
+				const allocated = new Map<string, string>();
+				for (let i = 0; i < tokens.length; i += 2) {
+					const label = tokens[i]!;
+					if (allocated.has(label))
+						throw new DocumentEditError('DUPLICATE_FRAGMENT_ID', '控制器页面标签重复', 'xml');
+					let id = operation.action === 'replace' && existing.has(label) ? label : '';
+					if (!id) {
+						let next = 0;
+						while (existing.has(String(next))) next++;
+						id = String(next);
+					}
+					existing.add(id);
+					allocated.set(label, id);
+					tokens[i] = id;
+				}
+				attrs.pages = tokens.join(',');
+				pageMappings.set(name, allocated);
+			}
+			if (Array.isArray(childrenOf(entry))) for (const child of childrenOf(entry)) allocatePages(child);
+		};
+		for (const entry of entries) allocatePages(entry);
 		const remap = (entry: Entry, parent: string) => {
 			const tag = tagOf(entry);
 			const attrs = attrsOf(entry);
+			if (tag.startsWith('gear') && attrs.pages !== undefined) {
+				const pages = pageMappings.get(String(attrs.controller ?? ''));
+				attrs.pages = String(attrs.pages)
+					.split(',')
+					.map((page) => pages?.get(page) ?? page)
+					.join(',');
+			}
+			if (tag === 'action') {
+				const pages = pageMappings.get(parent);
+				for (const key of ['fromPage', 'toPage'])
+					if (attrs[key] !== undefined)
+						attrs[key] = String(attrs[key])
+							.split(',')
+							.map((page) => pages?.get(page) ?? page)
+							.join(',');
+			}
 			const fields =
 				tag === 'relation'
 					? ['target']
@@ -186,9 +259,42 @@ export function editComponentXml(
 				const value = String(attrs[key] ?? '');
 				if (Object.hasOwn(mapping, value)) attrs[key] = mapping[value]!;
 			}
-			if (Array.isArray(childrenOf(entry))) for (const child of childrenOf(entry)) remap(child, tag);
+			if (Array.isArray(childrenOf(entry)))
+				for (const child of childrenOf(entry))
+					remap(child, tag === 'controller' ? String(attrs.name ?? '') : tag);
 		};
 		for (const entry of entries) remap(entry, tagOf(target.entry));
+		const modifiedLabels = new Set(
+			Object.entries(idMap)
+				.filter(([label, id]) => label !== id)
+				.map(([label]) => label),
+		);
+		const fragmentDocument =
+			operation.target.kind === 'component' && operation.action === 'replace'
+				? originalEntries
+				: [
+						{
+							component: [
+								...originalEntries.filter((entry) => !displayTags.has(tagOf(entry))),
+								{ displayList: originalEntries.filter((entry) => displayTags.has(tagOf(entry))) },
+							],
+						},
+					];
+		const uncertain = findOpaqueProjectXmlReferences(
+			'component',
+			new XMLBuilder(options).build(fragmentDocument),
+			modifiedLabels,
+		);
+		if (uncertain.length)
+			throw new DocumentEditError('UNSAFE_REFERENCE', '片段附加 XML 引用无法安全重映射', 'xml', uncertain);
+		if (replacingRoot) {
+			const list = find(childrenOf(entries[0]!), 'displayList');
+			const retained = new Set((list ? childrenOf(list) : []).map((entry) => String(attrsOf(entry).id ?? '')));
+			const removed = new Set([...existingIds].filter((id) => !retained.has(id)));
+			const uncertain = findOpaqueProjectXmlReferences('component', source, removed);
+			if (uncertain.length)
+				throw new DocumentEditError('UNSAFE_REFERENCE', '被移除身份在附加 XML 中存在引用', 'xml', uncertain);
+		}
 		if (operation.action === 'replace') {
 			if (operation.target.kind === 'component') {
 				if (tagOf(entries[0]!) !== 'component')
@@ -216,6 +322,13 @@ export function editComponentXml(
 			}
 		}
 	}
+	const updatedRoot = find(tree, 'component')!;
+	const updatedList = find(childrenOf(updatedRoot), 'displayList');
+	const numericIds = (updatedList ? childrenOf(updatedList) : [])
+		.map((entry) => /^n(\d+)$/.exec(String(attrsOf(entry).id ?? '')))
+		.filter(Boolean)
+		.map((match) => Number(match![1]) + 1);
+	attrsOf(updatedRoot).idNum = Math.max(Number(attrsOf(updatedRoot).idNum ?? 0), ...numericIds, 0);
 	const xml = new XMLBuilder({ ...options, format: true, suppressEmptyNode: true }).build(tree) as string;
 	return { xml, idMap, findings: inspectOpaqueProjectXml('component', xml) };
 }
