@@ -12,6 +12,16 @@ function fixture() {
 	return { document, component };
 }
 
+test('allPages patches only the pages already defined by its Gear', t => {
+	const { document, component } = fixture();
+	const controller = document.createController('state'); component.addController(controller);
+	for (const id of ['a', 'b', 'c']) controller.addPage(document.createControllerPage(id).setId(id));
+	component.getChildById('n0')!.addGear(document.createGear().setGearType(GearType.XY).setController(controller).setPages('a,b').setValues('1,2|3,4'));
+	const result = applyDocumentEdits(document, [{ op: 'update', target: { kind: 'node', packageId: 'package1', componentId: 'panel', nodeId: 'n0' }, props: { x: 10 }, scope: { controller: 'state', allPages: true } }]);
+	const gear = result.document.getRoot().listPackages()[0]!.listComponents()[0]!.getChildById('n0')!.listGears()[0]!;
+	t.is(gear.getPages(), 'a,b'); t.is(gear.getValues(), '10,2|10,4');
+});
+
 test('document copies preserve opaque data and isolate graph references', (t) => {
 	const { document, component } = fixture();
 	const copy = cloneDocument(document);

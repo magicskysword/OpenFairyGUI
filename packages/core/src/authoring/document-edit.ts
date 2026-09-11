@@ -382,7 +382,7 @@ function updateNode(node: GObject, props: Record<string, unknown>, scope?: Autho
 		);
 		if (!gear) throw new DocumentEditError('GEAR_NOT_FOUND', `属性 ${key} 未绑定到控制器 ${scope.controller}`);
 		const controller = gear.getController()!;
-		const selected = 'allPages' in scope ? controller.listPages().map((p) => p.getId()) : [scope.pageId];
+		const selected = 'allPages' in scope ? [...new Set([...gear.getPages().split(',').filter(Boolean), ...Object.keys(gear.getPageValues())])] : [scope.pageId];
 		if (selected.some((id) => !controller.listPages().some((p) => p.getId() === id)))
 			throw new DocumentEditError('PAGE_NOT_FOUND', '控制器页面不存在');
 		const fields = gearFields[gear.getGearType()]!;
