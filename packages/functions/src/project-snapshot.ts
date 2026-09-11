@@ -232,6 +232,10 @@ function modelState(owner: Property): unknown {
 	const props = readAuthoringProperties(owner);
 	// 空发布名与包名回退在工程格式中具有相同的有效值。
 	if (owner.propertyType === 'Package' && !props.publishName) props.publishName = owner.getName();
+	// 动效值以 XML 文本元组保存，数值与对应的数值文本具有相同语义。
+	if (owner.propertyType === 'TransitionItem')
+		for (const key of ['startValue', 'endValue'])
+			if (Array.isArray(props[key])) props[key] = props[key].map(String);
 	const state: Record<string, unknown> = { type: owner.propertyType, props };
 	const object = owner as unknown as Record<string, unknown>;
 	if (typeof object.getId === 'function') state.id = object.getId.call(owner);
@@ -347,7 +351,20 @@ export async function prepareSnapshotEdits(
 	const sourcePath = (file: { kind: string; relativePath: string }) =>
 		file.kind === 'project' ? sourceName : file.relativePath;
 	for (let index = 0; index < operations.length; ) {
-		const operation = operations[index]!;
+		const operation = structuredClone(operations[index]!);
+		for (const field of [
+			'packageId',
+			'componentId',
+			'nodeId',
+			'resourceId',
+			'pageId',
+			'controllerName',
+			'transitionName',
+		] as const) {
+			const value = operation.target[field];
+			if (value?.startsWith('@') && clientRefs[value.slice(1)]?.[field])
+				operation.target[field] = clientRefs[value.slice(1)]![field];
+		}
 		if (operation.op === 'xml') {
 			const file = (
 				await serializeAffectedProjectFiles(document, [
@@ -371,11 +388,20 @@ export async function prepareSnapshotEdits(
 			const batch: DocumentEditOperation[] = [];
 			while (index < operations.length && operations[index]!.op !== 'xml') {
 				const item = structuredClone(operations[index]) as DocumentEditOperation;
-				for (const field of ['packageId', 'componentId', 'nodeId', 'resourceId', 'pageId'] as const) {
-					const value = item.target[field];
-					if (value?.startsWith('@') && clientRefs[value.slice(1)]?.[field])
-						item.target[field] = clientRefs[value.slice(1)]![field];
-				}
+				for (const target of [item.target, item.destination].filter(Boolean))
+					for (const field of [
+						'packageId',
+						'componentId',
+						'nodeId',
+						'resourceId',
+						'pageId',
+						'controllerName',
+						'transitionName',
+					] as const) {
+						const value = target![field];
+						if (value?.startsWith('@') && clientRefs[value.slice(1)]?.[field])
+							target![field] = clientRefs[value.slice(1)]![field];
+					}
 				batch.push(item);
 				index++;
 			}

@@ -3,6 +3,57 @@ import path from 'node:path';
 import { ProjectWriter, Document, type FileSystem, type GTextField } from '@magicskysword/openfairygui-core';
 import { captureProjectSnapshot, prepareSnapshotEdits } from '../src/project-snapshot.js';
 
+test('native controllers, gears, transitions and XML batch references roundtrip together', async (t) => {
+	const { fs } = await fixture();
+	const snapshot = await captureProjectSnapshot(fs, '/project/project.fairy');
+	const common = { packageId: 'package1', componentId: 'panel' };
+	const result = await prepareSnapshotEdits(snapshot, [
+		{ op: 'create', target: { ...common, kind: 'controller' }, props: { name: 'state' }, clientRef: 'state' },
+		{
+			op: 'create',
+			target: { ...common, kind: 'page', controllerName: '@state' },
+			props: { name: 'up' },
+			clientRef: 'up',
+		},
+		{
+			op: 'create',
+			target: { ...common, kind: 'page', controllerName: '@state' },
+			props: { name: 'down' },
+			clientRef: 'down',
+		},
+		{
+			op: 'create',
+			target: { ...common, kind: 'gear', nodeId: 'n0', controllerName: '@state' },
+			props: {
+				gearType: 1,
+				pages: '@up,@down',
+				values: '0,0|100,20',
+				defaultValue: '0,0',
+				tween: true,
+				tweenDuration: 0.5,
+			},
+		},
+		{ op: 'create', target: { ...common, kind: 'transition' }, props: { name: 'enter' }, clientRef: 'enter' },
+		{
+			op: 'create',
+			target: { ...common, kind: 'transition-item', transitionName: '@enter' },
+			props: { targetId: 'n0', actionType: 5, startValue: [0], endValue: [90], tween: true, duration: 0.5 },
+		},
+		{
+			op: 'xml',
+			action: 'insert',
+			target: { ...common, kind: 'component' },
+			xml: '<graph id="box" name="box" size="20,20"/>',
+		},
+		{ op: 'update', target: { ...common, kind: 'node', nodeId: '@box' }, props: { x: 40 } },
+	]);
+	const component = (await result.snapshot.readDocument()).getRoot().listPackages()[0]!.listComponents()[0]!;
+	t.is(component.getController('state')!.listPages().length, 2);
+	t.is(component.getChildById('n0')!.listGears()[0]!.getValues(), '0,0|100,20');
+	t.is(component.getTransition('enter')!.listItems()[0]!.getTargetId(), 'n0');
+	t.is(component.getChildById(result.clientRefs.box!.nodeId!)!.getX(), 40);
+});
+
 async function fixture() {
 	const files = new Map<string, Uint8Array>();
 	const fs: FileSystem = {
