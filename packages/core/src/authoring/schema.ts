@@ -75,7 +75,8 @@ export const AUTHORING_OPERATION_SCHEMA: AuthoringJsonSchema = {
 		operation('update', { props, scope }, ['props']),
 		operation('remove', { cascade: { type: 'boolean' } }),
 		operation('move', { destination: AUTHORING_TARGET_SCHEMA, toIndex: index }),
-		operation('replace', { type: text, props }),
+		operation('replace', { type: text, props, inboxPath: text }),
+		operation('import', { inboxPath: text, props, clientRef: text }, ['inboxPath']),
 		operation('clone', { destination: AUTHORING_TARGET_SCHEMA, props, clientRef: text, toIndex: index }),
 		operation(
 			'xml',

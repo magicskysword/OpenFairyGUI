@@ -11,6 +11,14 @@ import {
 import { generateChildId, generatePackageId, generateResourceId } from '../utils/id-utils.js';
 import { XMLBuilder, XMLParser } from 'fast-xml-parser';
 import { assertAuthoringOperations } from './schema.js';
+import {
+	applyResourceImport,
+	assertAuthoringName,
+	assertAuthoringResourcePath,
+	renameAuthoringResource,
+	type AuthoringImportData,
+} from './resource-edit.js';
+export type { AuthoringImportData } from './resource-edit.js';
 
 export interface AuthoringTarget {
 	kind:
@@ -40,7 +48,8 @@ export interface AuthoringTarget {
 export type AuthoringScope = 'base' | { controller: string; pageId: string } | { controller: string; allPages: true };
 
 export interface DocumentEditOperation {
-	op: 'create' | 'update' | 'remove' | 'move' | 'replace' | 'clone';
+	op: 'create' | 'update' | 'remove' | 'move' | 'replace' | 'clone' | 'import';
+	inboxPath?: string;
 	target: AuthoringTarget;
 	props?: Record<string, unknown>;
 	type?: string;
@@ -86,6 +95,11 @@ const forbiddenProperties = new Set([
 	'graph',
 	'extension',
 	'controller',
+	'imageData',
+	'soundData',
+	'resourceData',
+	'fontData',
+	'movieClipData',
 ]);
 const pairSetters: Record<string, [string, string, string]> = {
 	width: ['setSize', 'width', 'height'],
@@ -525,7 +539,11 @@ function remapComponentNodes(component: Component): void {
 /**
  * Applies an edit batch to an isolated graph and returns its affected source scope.
  */
-export function applyDocumentEdits(source: Document, operations: readonly DocumentEditOperation[]): DocumentEditResult {
+export function applyDocumentEdits(
+	source: Document,
+	operations: readonly DocumentEditOperation[],
+	options: { imports?: ReadonlyMap<string, AuthoringImportData> } = {},
+): DocumentEditResult {
 	assertAuthoringOperations(operations);
 	if (!operations.length || operations.length > 200)
 		throw new DocumentEditError('INVALID_EDIT', '编辑批次必须包含 1 至 200 项操作');
@@ -559,6 +577,10 @@ export function applyDocumentEdits(source: Document, operations: readonly Docume
 		try {
 			const target = resolve(operation.target);
 			const { pkg, component } = locateOwner(document, target);
+			if (['package', 'resource', 'component'].includes(target.kind)) {
+				if (operation.props?.name !== undefined) assertAuthoringName(String(operation.props.name));
+				if (operation.props?.path !== undefined) assertAuthoringResourcePath(String(operation.props.path));
+			}
 			if (target.kind === 'project' && operation.props?.settings) {
 				for (const setting of ['publish', 'common', 'adaptation'] as const)
 					if (Object.hasOwn(operation.props.settings as object, setting)) {
@@ -579,7 +601,19 @@ export function applyDocumentEdits(source: Document, operations: readonly Docume
 			if (operation.clientRef && Object.hasOwn(clientRefs, operation.clientRef))
 				throw new DocumentEditError('INVALID_CLIENT_REF', 'clientRef 重复');
 			let objects: Property[];
-			if (operation.op === 'create') {
+			if (operation.op === 'import' || (operation.op === 'replace' && operation.inboxPath !== undefined)) {
+				if (target.kind !== 'resource' || !pkg)
+					throw new DocumentEditError('INVALID_TARGET', '文件导入需要包内资源目标');
+				const data = options.imports?.get(operation.inboxPath ?? '');
+				if (!data) throw new DocumentEditError('INVALID_EDIT', '收件箱源数据未提供', 'inboxPath');
+				const existing =
+					operation.op === 'replace'
+						? (resolveAuthoringTarget(document, target)[0] as ReturnType<Package['listResources']>[number])
+						: undefined;
+				const resource = applyResourceImport(document, pkg, data, operation.props ?? {}, existing);
+				target.resourceId = resource.getId();
+				if (operation.clientRef) clientRefs[operation.clientRef] = { ...target };
+			} else if (operation.op === 'create') {
 				const name = String(operation.props?.name ?? '');
 				let object: Property;
 				switch (target.kind) {
@@ -690,6 +724,11 @@ export function applyDocumentEdits(source: Document, operations: readonly Docume
 				for (const object of objects) {
 					if (target.kind === 'node') target.nodeId = (object as GObject).getId();
 					if (operation.op === 'update') {
+						if (target.kind === 'resource' && operation.props?.name !== undefined)
+							renameAuthoringResource(
+								object as ReturnType<Package['listResources']>[number],
+								String(operation.props.name),
+							);
 						if (target.kind === 'node')
 							updateNode(object as GObject, operation.props ?? {}, operation.scope);
 						else setAuthoringProperties(object, operation.props ?? {});

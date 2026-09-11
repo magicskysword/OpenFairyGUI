@@ -22,7 +22,10 @@ test('authoring contract validates operation envelopes and finite JSON values', 
 	}
 	t.throws(() => assertAuthoringOperations([]), { code: 'INVALID_EDIT' });
 	t.throws(() => assertAuthoringOperations(Array(201).fill(operation)), { code: 'INVALID_EDIT' });
-	t.is(AUTHORING_OPERATION_SCHEMA.oneOf?.length, 7);
+	t.deepEqual(
+		AUTHORING_OPERATION_SCHEMA.oneOf?.map((schema) => schema.properties?.op?.const),
+		['create', 'update', 'remove', 'move', 'replace', 'import', 'clone', 'xml'],
+	);
 });
 
 test('authoring contract requires explicit selector counts and XML payloads', (t) => {

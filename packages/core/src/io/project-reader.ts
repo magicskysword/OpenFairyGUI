@@ -85,7 +85,7 @@ function readJpegSize(data: Uint8Array): { width: number; height: number } | nul
 	return null;
 }
 
-function readImageSize(data: Uint8Array): { width: number; height: number } | null {
+export function readImageSize(data: Uint8Array): { width: number; height: number } | null {
 	return readPngSize(data) ?? readJpegSize(data);
 }
 
