@@ -203,7 +203,14 @@ export function authoringPropertySchema(owner: Property): AuthoringJsonSchema {
 		properties[key] =
 			value === null
 				? { type: ['null', 'string', 'number', 'boolean', 'object', 'array'] }
-				: { type: Array.isArray(value) ? 'array' : typeof value };
+				: {
+						type: ['name', 'text', 'settings'].includes(key)
+							? Array.isArray(value)
+								? 'array'
+								: typeof value
+							: [Array.isArray(value) ? 'array' : typeof value, 'null'],
+					};
+		Object.assign(properties[key]!, propertyConstraint(owner, key));
 		if (['width', 'height'].includes(key)) properties[key]!.minimum = 0;
 		if (key === 'alpha') Object.assign(properties[key]!, { minimum: 0, maximum: 1 });
 		if (['x', 'y', 'width', 'height', 'pivotX', 'pivotY'].includes(key))
@@ -212,4 +219,55 @@ export function authoringPropertySchema(owner: Property): AuthoringJsonSchema {
 				: 'Logical pixels.';
 	}
 	return object(properties, []);
+}
+
+function propertyConstraint(owner: Property, key: string): AuthoringJsonSchema {
+	const numericEnums: Record<string, number> = {
+		gearType: 9,
+		easeType: 31,
+		flip: 3,
+		fillMethod: 5,
+		fillOrigin: 3,
+		overflow: 2,
+		scrollType: 2,
+		childrenRenderOrder: 2,
+	};
+	if (key === 'actionType' && owner.propertyType === 'ControllerAction') return { enum: [0, 1, null] };
+	if (key === 'actionType' && owner.propertyType === 'TransitionItem')
+		return { enum: [...Array.from({ length: 16 }, (_, index) => index), null] };
+	if (Object.hasOwn(numericEnums, key))
+		return { enum: [...Array.from({ length: numericEnums[key]! + 1 }, (_, index) => index), null] };
+	if (key === 'fps')
+		return { type: ['integer', 'null'], minimum: 1, maximum: 240, description: 'Transition frames per second.' };
+	if (owner.propertyType === 'TransitionItem' && ['time', 'duration'].includes(key))
+		return { minimum: 0, description: 'Authoring frames, converted to seconds using the owning Transition fps.' };
+	if (['tweenDuration', 'tweenDelay', 'autoPlayDelay'].includes(key)) return { minimum: 0, description: 'Seconds.' };
+	if (['rotation', 'skewX', 'skewY'].includes(key)) return { description: 'Degrees.' };
+	if (['align', 'verticalAlign'].includes(key))
+		return { enum: key === 'align' ? ['left', 'center', 'right', null] : ['top', 'middle', 'bottom', null] };
+	if (key === 'pageValues')
+		return {
+			type: ['object', 'null'],
+			additionalProperties: { type: ['string', 'number', 'boolean', 'array', 'null'] },
+			description:
+				'Page ID to native tuple; arrays form comma-separated tuples. A null entry clears its override.',
+		};
+	if (key === 'relations')
+		return {
+			type: ['array', 'null'],
+			items: object(
+				{
+					target: { type: 'string' },
+					type: { type: 'integer', minimum: 0, maximum: 24 },
+					usePercent: { type: 'boolean' },
+				},
+				['target', 'type', 'usePercent'],
+			),
+		};
+	return {};
+}
+
+export function assertAuthoringPropertyValue(owner: Property, key: string, value: unknown): void {
+	const error = matches(propertyConstraint(owner, key), value, `props.${key}`);
+	if (error) throw new DocumentEditError('INVALID_PROPERTY', '属性值不符合原生枚举或范围', error, value);
 }

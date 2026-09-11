@@ -11,7 +11,7 @@ import {
 } from '../references/project-reference-graph.js';
 import { generateChildId, generatePackageId, generateResourceId } from '../utils/id-utils.js';
 import { XMLBuilder, XMLParser } from 'fast-xml-parser';
-import { assertAuthoringOperations } from './schema.js';
+import { assertAuthoringOperations, assertAuthoringPropertyValue } from './schema.js';
 import { findOpaqueProjectXmlReferences } from '../io/opaque-project-xml.js';
 import {
 	mapNodeScope,
@@ -232,6 +232,7 @@ export function setAuthoringProperties(owner: Property, props: Record<string, un
 		if (raw === null && ['name', 'text', 'settings'].includes(key))
 			throw new DocumentEditError('INVALID_PROPERTY', `属性不能清除：${key}`, `props.${key}`);
 		const value = raw === null ? defaults[key] : mergeValue(current[key], raw);
+		assertAuthoringPropertyValue(owner, key, value);
 		const expected = defaults[key];
 		if (
 			expected !== null &&

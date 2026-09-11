@@ -4,7 +4,7 @@ import {
 	assertAuthoringOperations,
 	authoringPropertySchema,
 } from '../src/authoring/schema.js';
-import { Document } from '../src/index.js';
+import { Document, setAuthoringProperties } from '../src/index.js';
 
 test('authoring contract validates operation envelopes and finite JSON values', (t) => {
 	const operation = {
@@ -55,9 +55,27 @@ test('authoring contract requires explicit selector counts and XML payloads', (t
 
 test('property definitions use current native fields and reflect nullable values', (t) => {
 	const schema = authoringPropertySchema(new Document().createGTextField('text'));
-	t.deepEqual(schema.properties?.x?.type, 'number');
+	t.deepEqual(schema.properties?.x?.type, ['number', 'null']);
 	t.deepEqual(schema.properties?.text?.type, 'string');
 	t.is(schema.properties?.alpha?.maximum, 1);
 	t.is(schema.properties?.id, undefined);
 	t.is(schema.additionalProperties, false);
+});
+
+test('native definitions and editing share enums, units and nullability', (t) => {
+	const document = new Document();
+	const gear = document.createGear();
+	const schema = authoringPropertySchema(gear);
+	t.deepEqual(schema.properties?.gearType?.enum, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, null]);
+	t.true(schema.properties?.tweenDuration?.description?.includes('Seconds') ?? false);
+	t.true(
+		authoringPropertySchema(document.createTransitionItem()).properties?.duration?.description?.includes(
+			'frames',
+		) ?? false,
+	);
+	t.throws(() => setAuthoringProperties(gear, { gearType: 10 }), { code: 'INVALID_PROPERTY' });
+	t.throws(() => setAuthoringProperties(document.createControllerAction(), { actionType: 3 }), {
+		code: 'INVALID_PROPERTY',
+	});
+	t.notThrows(() => setAuthoringProperties(document.createGTextField(), { x: null }));
 });
