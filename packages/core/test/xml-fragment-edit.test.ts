@@ -5,6 +5,14 @@ const source =
 	'<component size="100,100" custom="kept"><displayList><text id="n3" name="title" xy="0,0" text="Hi"/><graph id="g" name="box" xy="0,0"/></displayList><transition name="enter"><item type="Rotation" target="n3" time="0"/></transition></component>';
 const target = { kind: 'component' as const, packageId: 'package1', componentId: 'panel' };
 
+test('fragment byte limit applies to the supplied XML payload', t => {
+	const envelope = '<text id="large" text=""/>';
+	const xml = envelope.replace('text=""', `text="${'a'.repeat(1024 * 1024 - new TextEncoder().encode(envelope).length)}"`);
+	t.is(new TextEncoder().encode(xml).length, 1024 * 1024);
+	t.notThrows(() => editComponentXml(source, { op: 'xml', action: 'insert', target, xml }));
+	t.throws(() => editComponentXml(source, { op: 'xml', action: 'insert', target, xml: xml + ' ' }), { code: 'XML_LIMIT_EXCEEDED' });
+});
+
 test('XML controller pages allocate scoped IDs and rewrite Gear page labels', (t) => {
 	const result = editComponentXml(source, {
 		op: 'xml',
