@@ -78,4 +78,6 @@ test('native definitions and editing share enums, units and nullability', (t) =>
 		code: 'INVALID_PROPERTY',
 	});
 	t.notThrows(() => setAuthoringProperties(document.createGTextField(), { x: null }));
+	t.notThrows(() => setAuthoringProperties(document.createGTextField(), { align: 1, vAlign: 2 }));
+	t.deepEqual(authoringPropertySchema(document.createGTextField()).properties?.align?.enum, [0, 1, 2, null]);
 });

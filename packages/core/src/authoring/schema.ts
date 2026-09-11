@@ -231,6 +231,8 @@ function propertyConstraint(owner: Property, key: string): AuthoringJsonSchema {
 		overflow: 2,
 		scrollType: 2,
 		childrenRenderOrder: 2,
+		align: 2,
+		vAlign: 2,
 	};
 	if (key === 'actionType' && owner.propertyType === 'ControllerAction') return { enum: [0, 1, null] };
 	if (key === 'actionType' && owner.propertyType === 'TransitionItem')
@@ -243,8 +245,6 @@ function propertyConstraint(owner: Property, key: string): AuthoringJsonSchema {
 		return { minimum: 0, description: 'Authoring frames, converted to seconds using the owning Transition fps.' };
 	if (['tweenDuration', 'tweenDelay', 'autoPlayDelay'].includes(key)) return { minimum: 0, description: 'Seconds.' };
 	if (['rotation', 'skewX', 'skewY'].includes(key)) return { description: 'Degrees.' };
-	if (['align', 'verticalAlign'].includes(key))
-		return { enum: key === 'align' ? ['left', 'center', 'right', null] : ['top', 'middle', 'bottom', null] };
 	if (key === 'pageValues')
 		return {
 			type: ['object', 'null'],
