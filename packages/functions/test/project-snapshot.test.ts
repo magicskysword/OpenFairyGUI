@@ -1,6 +1,6 @@
 import test from 'ava';
 import path from 'node:path';
-import { ProjectWriter, Document, type FileSystem, type GTextField } from '@magicskysword/openfairygui-core';
+import { ProjectWriter, Document, type FileSystem, type GTextField, type GGraph } from '@magicskysword/openfairygui-core';
 import { captureProjectSnapshot, prepareSnapshotEdits } from '../src/project-snapshot.js';
 
 test('mixed batch errors retain the original operation index', async t => {
@@ -179,7 +179,7 @@ test('native controllers, gears, transitions and XML batch references roundtrip 
 	t.is(component.getChildById('n0')!.listGears()[0]!.getValues(), '0,0|100,20');
 	t.is(component.getTransition('enter')!.listItems()[0]!.getTargetId(), 'n0');
 	t.true(result.affectedReferences.some(edge => edge.source.transition === 'enter' && edge.field === 'targetId'));
-	t.is(component.getChildById(result.clientRefs.box!.nodeId!)!.getX(), 40);
+	t.is((component.getChildById(result.clientRefs.box!.nodeId!) as GGraph).getX(), 40);
 });
 
 async function fixture() {
