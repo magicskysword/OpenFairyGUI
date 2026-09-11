@@ -227,6 +227,10 @@ export {
 
 // Resource references
 export {
+	cloneDocument, readAuthoringProperties, setAuthoringProperties, resolveAuthoringTarget, applyDocumentEdits, DocumentEditError,
+	type AuthoringTarget, type AuthoringScope, type DocumentEditOperation, type DocumentEditResult,
+} from './authoring/document-edit.js';
+export {
 	buildProjectReferenceGraph, compareProjectDiagnostics, projectReferenceKey,
 	type ProjectReferenceGraph, type ProjectReferenceEdge, type ProjectReferenceSource,
 	type ProjectReferenceTarget, type ProjectDiagnostic,
