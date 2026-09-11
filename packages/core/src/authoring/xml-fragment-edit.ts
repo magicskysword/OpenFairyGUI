@@ -43,8 +43,8 @@ const childrenOf = (entry: Entry) => entry[tagOf(entry)] as Entry[];
 const find = (entries: Entry[], tag: string, field?: string, value?: string) =>
 	entries.find((entry) => tagOf(entry) === tag && (!field || attrsOf(entry)[field] === value));
 
-function parse(xml: string): Entry[] {
-	if (new TextEncoder().encode(xml).byteLength > 1024 * 1024)
+function parse(xml: string, isFragment = true): Entry[] {
+	if (isFragment && new TextEncoder().encode(xml).byteLength > 1024 * 1024)
 		throw new DocumentEditError('XML_LIMIT_EXCEEDED', 'XML 超过 1 MiB');
 	if (/<!\s*(DOCTYPE|ENTITY)/i.test(xml))
 		throw new DocumentEditError('XML_ENTITY_FORBIDDEN', 'XML 外部实体与 DTD 不可用');
@@ -108,7 +108,7 @@ export function editComponentXml(
 	source: string,
 	operation: XmlFragmentOperation,
 ): { xml: string; idMap: Record<string, string>; findings: ReturnType<typeof inspectOpaqueProjectXml> } {
-	const tree = parse(source);
+	const tree = parse(source, false);
 	const root = find(tree, 'component');
 	if (!root) throw new DocumentEditError('INVALID_XML', '组件 XML 缺少 component 根');
 	const target = locate(root, operation.target);
@@ -218,4 +218,13 @@ export function editComponentXml(
 	}
 	const xml = new XMLBuilder({ ...options, format: true, suppressEmptyNode: true }).build(tree) as string;
 	return { xml, idMap, findings: inspectOpaqueProjectXml('component', xml) };
+}
+
+/**
+ * Reads a single native structure, including its preserved extension attributes.
+ */
+export function readComponentXmlFragment(source: string, target: AuthoringTarget): string {
+	const root = find(parse(source, false), 'component');
+	if (!root) throw new DocumentEditError('INVALID_XML', '组件 XML 缺少 component 根');
+	return new XMLBuilder(options).build([locate(root, target).entry]);
 }

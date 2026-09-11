@@ -76,3 +76,12 @@ test('component replacement retains existing node identities and allocates new n
 	t.is(result.idMap.new, 'n4');
 	t.true(result.xml.includes('target="n4"'));
 });
+import { readComponentXmlFragment } from '../src/authoring/xml-fragment-edit.js';
+
+test('native XML reads return only the explicitly selected structure', t => {
+	const source = '<component size="20,20"><displayList><text id="n0" name="title" text="Hello" vendor="keep"/><graph id="n1" name="other"/></displayList></component>';
+	const fragment = readComponentXmlFragment(source, { kind: 'node', nodeId: 'n0' });
+	t.true(fragment.includes('vendor="keep"'));
+	t.false(fragment.includes('n1'));
+	t.throws(() => readComponentXmlFragment(source, { kind: 'node', nodeId: 'missing' }), { code: 'XML_TARGET_NOT_FOUND' });
+});
