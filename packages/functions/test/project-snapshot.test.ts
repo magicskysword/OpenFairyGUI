@@ -154,3 +154,16 @@ test('model values lost by serialization reject the prepared edit', async (t) =>
 		{ code: 'SERIALIZATION_FAILED' },
 	);
 });
+
+test('new packages and components preserve effective publishing defaults on roundtrip', async (t) => {
+	const { fs } = await fixture();
+	const snapshot = await captureProjectSnapshot(fs, '/project/project.fairy');
+	const result = await prepareSnapshotEdits(snapshot, [
+		{ op: 'create', target: { kind: 'package' }, props: { name: 'Widgets' }, clientRef: 'widgets' },
+		{ op: 'create', target: { kind: 'component', packageId: '@widgets' }, props: { name: 'Dialog', width: 640, height: 360 }, clientRef: 'dialog' },
+	]);
+	const pkg = (await result.snapshot.readDocument()).getRoot().listPackages().find(item => item.getName() === 'Widgets')!;
+	t.is(pkg.getPublishName(), 'Widgets');
+	t.is(pkg.listComponents()[0]!.getWidth(), 640);
+	t.is(result.changes.length, 2);
+});

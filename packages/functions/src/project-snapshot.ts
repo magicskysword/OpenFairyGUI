@@ -227,7 +227,10 @@ function canonicalState(value: unknown): unknown {
 }
 
 function modelState(owner: Property): unknown {
-	const state: Record<string, unknown> = { type: owner.propertyType, props: readAuthoringProperties(owner) };
+	const props = readAuthoringProperties(owner);
+	// 空发布名与包名回退在工程格式中具有相同的有效值。
+	if (owner.propertyType === 'Package' && !props.publishName) props.publishName = owner.getName();
+	const state: Record<string, unknown> = { type: owner.propertyType, props };
 	const object = owner as unknown as Record<string, unknown>;
 	if (typeof object.getId === 'function') state.id = object.getId.call(owner);
 	for (const method of [
