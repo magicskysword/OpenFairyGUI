@@ -2,6 +2,7 @@ import {
 	ProjectReader,
 	applyDocumentEdits,
 	assertAuthoringOperations,
+	readAuthoringProperties,
 	buildProjectReferenceGraph,
 	compareProjectDiagnostics,
 	DocumentEditError,
@@ -13,6 +14,7 @@ import {
 	type FileSystem,
 	type AuthoringTarget,
 	type ProjectFileTarget,
+	type Property,
 } from '@magicskysword/openfairygui-core';
 
 export type SnapshotEditOperation = DocumentEditOperation | XmlFragmentOperation;
@@ -202,13 +204,68 @@ export async function captureProjectSnapshot(fs: FileSystem, projectPath: string
 }
 
 function existingTargets(document: Document, targets: ProjectFileTarget[]): ProjectFileTarget[] {
-	return targets.filter(
-		(target) =>
-			!('packageId' in target) ||
-			(target.kind === 'component'
-				? document.getRoot().getPackageById(target.packageId)?.getResourceById(target.componentId) !== undefined
-				: document.getRoot().getPackageById(target.packageId) !== undefined),
+	return targets.filter((target) =>
+		target.kind === 'setting'
+			? Boolean(document.getRoot().getSettings()[target.setting])
+			: !('packageId' in target) ||
+				(target.kind === 'component'
+					? document.getRoot().getPackageById(target.packageId)?.getResourceById(target.componentId) != null
+					: document.getRoot().getPackageById(target.packageId) != null),
 	);
+}
+
+function canonicalState(value: unknown): unknown {
+	if (typeof value === 'string' && /^#[a-f\d]{6,8}$/i.test(value)) return value.toLowerCase();
+	if (Array.isArray(value)) return value.map(canonicalState);
+	if (value && typeof value === 'object')
+		return Object.fromEntries(
+			Object.entries(value)
+				.sort(([a], [b]) => a.localeCompare(b))
+				.map(([key, child]) => [key, canonicalState(child)]),
+		);
+	return value;
+}
+
+function modelState(owner: Property): unknown {
+	const state: Record<string, unknown> = { type: owner.propertyType, props: readAuthoringProperties(owner) };
+	const object = owner as unknown as Record<string, unknown>;
+	if (typeof object.getId === 'function') state.id = object.getId.call(owner);
+	for (const method of [
+		'listPackages',
+		'listResources',
+		'listChildren',
+		'listControllers',
+		'listPages',
+		'listGears',
+		'listActions',
+		'listTransitions',
+		'listItems',
+	]) {
+		if (typeof object[method] !== 'function') continue;
+		const values = (object[method] as () => Property[]).call(owner).map(modelState);
+		if (method === 'listPackages' || method === 'listResources')
+			values.sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+		state[method] = values;
+	}
+	return canonicalState(state);
+}
+
+function firstDifference(
+	expected: unknown,
+	actual: unknown,
+	path = 'document',
+): { path: string; expected: unknown; actual: unknown } | undefined {
+	if (Object.is(expected, actual)) return;
+	if (!expected || !actual || typeof expected !== 'object' || typeof actual !== 'object')
+		return { path, expected, actual };
+	for (const key of new Set([...Object.keys(expected), ...Object.keys(actual)])) {
+		const diff = firstDifference(
+			(expected as Record<string, unknown>)[key],
+			(actual as Record<string, unknown>)[key],
+			`${path}.${key}`,
+		);
+		if (diff) return diff;
+	}
 }
 
 export async function prepareSnapshotEdits(
@@ -230,6 +287,9 @@ export async function prepareSnapshotEdits(
 	const clientRefs: Record<string, AuthoringTarget> = {};
 	const changes = new Map<string, SnapshotChange>();
 	const operationResults: Array<{ index: number; op: string; targets: AuthoringTarget[] }> = [];
+	const sourceName = keyOf(source.projectPath).split('/').pop()!;
+	const sourcePath = (file: { kind: string; relativePath: string }) =>
+		file.kind === 'project' ? sourceName : file.relativePath;
 	for (let index = 0; index < operations.length; ) {
 		const operation = operations[index]!;
 		if (operation.op === 'xml') {
@@ -269,15 +329,24 @@ export async function prepareSnapshotEdits(
 				result.document,
 				existingTargets(result.document, result.affected),
 			);
-			const afterPaths = new Set(after.map((file) => file.relativePath));
+			const afterPaths = new Set(after.map(sourcePath));
 			const updates: SnapshotChange[] = [
 				...before
-					.filter((file) => !afterPaths.has(file.relativePath))
-					.map((file) => ({ relativePath: file.relativePath })),
-				...after.map((file) => ({ relativePath: file.relativePath, content: encoder.encode(file.content) })),
+					.filter((file) => !afterPaths.has(sourcePath(file)))
+					.map((file) => ({ relativePath: sourcePath(file) })),
+				...after.map((file) => ({ relativePath: sourcePath(file), content: encoder.encode(file.content) })),
 			];
 			for (const change of updates) changes.set(change.relativePath, change);
 			snapshot = await snapshot.withChanges(updates);
+			const reread = await snapshot.readDocument();
+			const difference = firstDifference(modelState(result.document.getRoot()), modelState(reread.getRoot()));
+			if (difference)
+				throw new DocumentEditError(
+					'SERIALIZATION_FAILED',
+					'编辑模型在序列化回读后发生语义变化',
+					difference.path,
+					difference,
+				);
 			Object.assign(clientRefs, result.clientRefs);
 			operationResults.push(...result.operationResults.map((item) => ({ ...item, index: item.index + start })));
 		}

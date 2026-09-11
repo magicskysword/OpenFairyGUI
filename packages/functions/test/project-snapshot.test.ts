@@ -98,3 +98,59 @@ test('XML changes participate in reference validation', async (t) => {
 		{ code: 'REFERENCE_VALIDATION_FAILED' },
 	);
 });
+
+test('project settings and non-default project filenames persist in prepared snapshots', async (t) => {
+	const { fs, files } = await fixture();
+	files.set('/project/custom.fairy', files.get('/project/project.fairy')!);
+	files.delete('/project/project.fairy');
+	const snapshot = await captureProjectSnapshot(fs, '/project/custom.fairy');
+	const result = await prepareSnapshotEdits(snapshot, [
+		{
+			op: 'update',
+			target: { kind: 'project' },
+			props: { version: '6.0', settings: { common: { font: 'Arial' }, publish: { path: 'release' } } },
+		},
+	]);
+	t.is((await result.snapshot.readDocument()).getRoot().getVersion(), '6.0');
+	t.is((await result.snapshot.readDocument()).getRoot().getSettings().common?.font, 'Arial');
+	t.true(result.changes.some((file) => file.relativePath === 'custom.fairy'));
+	t.false(result.changes.some((file) => file.relativePath === 'project.fairy'));
+});
+
+test('component rename and deletion update package metadata and source paths', async (t) => {
+	const { fs } = await fixture();
+	const snapshot = await captureProjectSnapshot(fs, '/project/project.fairy');
+	const renamed = await prepareSnapshotEdits(snapshot, [
+		{
+			op: 'update',
+			target: { kind: 'component', packageId: 'package1', componentId: 'panel' },
+			props: { name: 'Renamed' },
+		},
+	]);
+	t.is(
+		(await renamed.snapshot.readDocument()).getRoot().listPackages()[0]!.listComponents()[0]!.getName(),
+		'Renamed',
+	);
+	t.true(renamed.changes.some((file) => file.relativePath === 'assets/UI/Panel.xml' && file.content === undefined));
+	const removed = await prepareSnapshotEdits(renamed.snapshot, [
+		{ op: 'remove', target: { kind: 'component', packageId: 'package1', componentId: 'panel' } },
+	]);
+	t.is((await removed.snapshot.readDocument()).getRoot().listPackages()[0]!.listComponents().length, 0);
+	t.true(removed.changes.some((file) => file.relativePath === 'assets/UI/Renamed.xml' && file.content === undefined));
+});
+
+test('model values lost by serialization reject the prepared edit', async (t) => {
+	const { fs } = await fixture();
+	const snapshot = await captureProjectSnapshot(fs, '/project/project.fairy');
+	await t.throwsAsync(
+		() =>
+			prepareSnapshotEdits(snapshot, [
+				{
+					op: 'update',
+					target: { kind: 'node', packageId: 'package1', componentId: 'panel', nodeId: 'n0' },
+					props: { shadowOffsetX: 7 },
+				},
+			]),
+		{ code: 'SERIALIZATION_FAILED' },
+	);
+});

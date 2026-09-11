@@ -526,7 +526,7 @@ function remapComponentNodes(component: Component): void {
  * Applies an edit batch to an isolated graph and returns its affected source scope.
  */
 export function applyDocumentEdits(source: Document, operations: readonly DocumentEditOperation[]): DocumentEditResult {
-  assertAuthoringOperations(operations);
+	assertAuthoringOperations(operations);
 	if (!operations.length || operations.length > 200)
 		throw new DocumentEditError('INVALID_EDIT', '编辑批次必须包含 1 至 200 项操作');
 	const document = cloneDocument(source);
@@ -559,6 +559,23 @@ export function applyDocumentEdits(source: Document, operations: readonly Docume
 		try {
 			const target = resolve(operation.target);
 			const { pkg, component } = locateOwner(document, target);
+			if (target.kind === 'project' && operation.props?.settings) {
+				for (const setting of ['publish', 'common', 'adaptation'] as const)
+					if (Object.hasOwn(operation.props.settings as object, setting)) {
+						const entry: ProjectFileTarget = { kind: 'setting', setting };
+						affected.set(JSON.stringify(entry), entry);
+					}
+			}
+			if (
+				target.kind === 'component' &&
+				(operation.props?.name !== undefined ||
+					operation.props?.path !== undefined ||
+					operation.props?.exported !== undefined)
+			)
+				touch({ kind: 'package', packageId: target.packageId });
+			if (target.kind === 'package' && pkg && (operation.op === 'remove' || operation.props?.name !== undefined))
+				for (const item of pkg.listComponents())
+					touch({ kind: 'component', packageId: pkg.getId(), componentId: item.getId() });
 			if (operation.clientRef && Object.hasOwn(clientRefs, operation.clientRef))
 				throw new DocumentEditError('INVALID_CLIENT_REF', 'clientRef 重复');
 			let objects: Property[];
@@ -774,12 +791,10 @@ export function applyDocumentEdits(source: Document, operations: readonly Docume
 							generateChildId(destinationComponent.listChildren().map((c) => c.getId())),
 						);
 						copied.setRelations(
-							copied
-								.getRelations()
-								.map((r) => ({
-									...r,
-									target: r.target === (object as GObject).getId() ? copied.getId() : r.target,
-								})),
+							copied.getRelations().map((r) => ({
+								...r,
+								target: r.target === (object as GObject).getId() ? copied.getId() : r.target,
+							})),
 						);
 						setAuthoringProperties(copied, operation.props ?? {});
 						destinationComponent.insertChild(
