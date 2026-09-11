@@ -156,6 +156,7 @@ interface SpriteLookupEntry {
 }
 
 interface RestorableDisplayObject {
+	readonly propertyType?: string;
 	getFileName?(): string;
 	getFont?(): string;
 	getPackageId?(): string;
@@ -883,7 +884,7 @@ class RestoreWorkflow {
 		for (const pkg of doc.getRoot().listPackages()) {
 			for (const component of pkg.listComponents()) {
 				for (const child of component.listChildren() as RestorableDisplayObject[]) {
-					if (!child.setFileName || child.getFileName?.()) continue;
+					if (child.propertyType === 'GImage' || !child.setFileName || child.getFileName?.()) continue;
 					const resource = this._resolveDisplayObjectResource(doc, pkg, child);
 					const fileName = resource ? resourceInstanceFileName(resource) : '';
 					if (fileName) child.setFileName(fileName);
