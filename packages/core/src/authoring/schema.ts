@@ -67,6 +67,14 @@ const props: AuthoringJsonSchema = {
 	description: 'Native property patch; omitted fields retain values, null clears optional fields, arrays replace.',
 };
 const shared = { target: AUTHORING_TARGET_SCHEMA };
+const bindings = object(
+	{
+		nodes: { type: 'object', additionalProperties: { type: 'string' } },
+		controllers: { type: 'object', additionalProperties: text },
+		pages: { type: 'object', additionalProperties: text },
+	},
+	[],
+);
 const operation = (op: string, fields: Record<string, AuthoringJsonSchema>, required: string[] = []) =>
 	object({ op: { const: op }, ...shared, ...fields }, ['op', 'target', ...required]);
 export const AUTHORING_OPERATION_SCHEMA: AuthoringJsonSchema = {
@@ -74,10 +82,10 @@ export const AUTHORING_OPERATION_SCHEMA: AuthoringJsonSchema = {
 		operation('create', { type: text, props, clientRef: text, toIndex: index }),
 		operation('update', { props, scope }, ['props']),
 		operation('remove', { cascade: { type: 'boolean' } }),
-		operation('move', { destination: AUTHORING_TARGET_SCHEMA, toIndex: index }),
+		operation('move', { destination: AUTHORING_TARGET_SCHEMA, toIndex: index, bindings }),
 		operation('replace', { type: text, props, inboxPath: text }),
 		operation('import', { inboxPath: text, props, clientRef: text }, ['inboxPath']),
-		operation('clone', { destination: AUTHORING_TARGET_SCHEMA, props, clientRef: text, toIndex: index }),
+		operation('clone', { destination: AUTHORING_TARGET_SCHEMA, props, clientRef: text, toIndex: index, bindings }),
 		operation(
 			'xml',
 			{

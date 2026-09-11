@@ -12,6 +12,13 @@ import { generateChildId, generatePackageId, generateResourceId } from '../utils
 import { XMLBuilder, XMLParser } from 'fast-xml-parser';
 import { assertAuthoringOperations } from './schema.js';
 import {
+	mapNodeScope,
+	retainRelativeResources,
+	resolveBatchProperties,
+	rewriteResourceReferences,
+	type AuthoringBindings,
+} from './migration.js';
+import {
 	applyResourceImport,
 	assertAuthoringName,
 	assertAuthoringResourcePath,
@@ -58,6 +65,7 @@ export interface DocumentEditOperation {
 	cascade?: boolean;
 	toIndex?: number;
 	destination?: AuthoringTarget;
+	bindings?: AuthoringBindings;
 }
 
 export interface DocumentEditResult {
@@ -533,6 +541,7 @@ function remapComponentNodes(component: Component): void {
 		if (group && ids.has(group)) invoke(child, 'setGroup', ids.get(group));
 	}
 	component.setMask(ids.get(component.getMask()) ?? component.getMask());
+	component.setRelations(component.getRelations().map((r) => ({ ...r, target: ids.get(r.target) ?? r.target })));
 	component.setIdNum(component.listChildren().length);
 	for (const controller of component.listControllers())
 		for (const action of controller.listActions())
@@ -606,7 +615,15 @@ export function applyDocumentEdits(
 	};
 	const resolve = (input: AuthoringTarget): AuthoringTarget => {
 		const target = { ...input };
-		for (const key of ['packageId', 'componentId', 'nodeId', 'resourceId', 'pageId'] as const) {
+		for (const key of [
+			'packageId',
+			'componentId',
+			'nodeId',
+			'resourceId',
+			'pageId',
+			'controllerName',
+			'transitionName',
+		] as const) {
 			const value = target[key];
 			if (value?.startsWith('@')) {
 				const ref = clientRefs[value.slice(1)];
@@ -859,19 +876,43 @@ export function applyDocumentEdits(
 							generateResourceId(destinationPackage.listResources().map((r) => r.getId())),
 						);
 						remapComponentNodes(copied);
+						if (destinationPackage !== pkg)
+							for (const child of copied.listChildren()) retainRelativeResources(child, pkg!.getId());
 						setAuthoringProperties(copied, operation.props ?? {});
 						destinationPackage.addResource(copied);
 						target.packageId = destinationPackage.getId();
 						target.componentId = copied.getId();
 						touch({ kind: 'package', packageId: target.packageId });
 						if (operation.clientRef) clientRefs[operation.clientRef] = { ...target };
-					} else if (operation.op === 'clone' && target.kind === 'node') {
+					} else if (
+						(operation.op === 'clone' || (operation.op === 'move' && operation.destination)) &&
+						target.kind === 'node'
+					) {
 						const destination = operation.destination
 							? resolve(operation.destination)
 							: { kind: 'component' as const, packageId: pkg!.getId(), componentId: component!.getId() };
 						const destinationComponent = resolveAuthoringTarget(document, destination)[0] as Component;
 						if (destinationComponent.propertyType !== PropertyType.COMPONENT)
 							throw new DocumentEditError('INVALID_TARGET', '节点目标必须是组件');
+						if (operation.op === 'move' && destinationComponent === component) {
+							component.moveChild(
+								object as GObject,
+								operation.toIndex ?? component.listChildren().length - 1,
+							);
+							continue;
+						}
+						if (operation.op === 'move') {
+							const incoming = buildProjectReferenceGraph(document)
+								.find(referenceTarget(target)!)
+								.filter((e) => e.source.nodeId !== target.nodeId);
+							if (incoming.length)
+								throw new DocumentEditError(
+									'DEPENDENCY_EXISTS',
+									'迁移节点仍被原组件引用',
+									'target',
+									incoming,
+								);
+						}
 						const copied = cloneProperty(document, object as GObject, true).setId(
 							generateChildId(destinationComponent.listChildren().map((c) => c.getId())),
 						);
@@ -881,14 +922,80 @@ export function applyDocumentEdits(
 								target: r.target === (object as GObject).getId() ? copied.getId() : r.target,
 							})),
 						);
+						if (destinationComponent !== component)
+							mapNodeScope(copied, (object as GObject).getId(), destinationComponent, operation.bindings);
+						if (destination.packageId !== pkg!.getId()) retainRelativeResources(copied, pkg!.getId());
 						setAuthoringProperties(copied, operation.props ?? {});
 						destinationComponent.insertChild(
 							copied,
 							operation.toIndex ?? destinationComponent.listChildren().length,
 						);
+						destinationComponent.setIdNum(
+							Math.max(destinationComponent.getIdNum(), Number(copied.getId().slice(1)) + 1),
+						);
+						if (operation.op === 'move') {
+							component!.removeChild(object as GObject);
+							touch(target);
+						}
 						target.packageId = destination.packageId;
 						target.componentId = destination.componentId;
 						target.nodeId = copied.getId();
+						if (operation.clientRef) clientRefs[operation.clientRef] = { ...target };
+					} else if (operation.op === 'move' && ['resource', 'component'].includes(target.kind)) {
+						if (!operation.destination || operation.destination.kind !== 'package')
+							throw new DocumentEditError('INVALID_TARGET', '资源迁移需要目标包');
+						const destination = resolve(operation.destination);
+						const destinationPackage = resolveAuthoringTarget(document, destination)[0] as Package;
+						if (destinationPackage === pkg) continue;
+						const resource = object as ReturnType<Package['listResources']>[number];
+						const oldId = resource.getId();
+						const newId = destinationPackage.getResourceById(oldId)
+							? generateResourceId(destinationPackage.listResources().map((r) => r.getId()))
+							: oldId;
+						const edges = buildProjectReferenceGraph(document).find({
+							kind: 'resource',
+							packageId: pkg!.getId(),
+							id: oldId,
+						});
+						rewriteResourceReferences(
+							document,
+							edges,
+							{ packageId: pkg!.getId(), id: oldId },
+							{ packageId: destinationPackage.getId(), id: newId },
+						);
+						for (const edge of edges)
+							touch({
+								kind: 'component',
+								packageId: edge.source.packageId,
+								componentId: edge.source.componentId,
+							});
+						if (resource.propertyType === PropertyType.COMPONENT)
+							for (const child of (resource as Component).listChildren())
+								retainRelativeResources(child, pkg!.getId());
+						touch(target);
+						touch({ kind: 'package', packageId: pkg!.getId() });
+						pkg!.removeResource(resource);
+						resource.setId(newId);
+						destinationPackage.addResource(resource);
+						target.packageId = destinationPackage.getId();
+						if (target.kind === 'component') target.componentId = newId;
+						else target.resourceId = newId;
+						touch({ kind: 'package', packageId: target.packageId });
+					} else if (operation.op === 'clone' && target.kind === 'resource') {
+						const destination = operation.destination
+							? resolve(operation.destination)
+							: { kind: 'package' as const, packageId: pkg!.getId() };
+						if (destination.kind !== 'package')
+							throw new DocumentEditError('INVALID_TARGET', '资源复制需要目标包');
+						const destinationPackage = resolveAuthoringTarget(document, destination)[0] as Package;
+						const copied = cloneProperty(document, object as ReturnType<Package['listResources']>[number]);
+						copied.setId(generateResourceId(destinationPackage.listResources().map((r) => r.getId())));
+						if (operation.props?.name !== undefined)
+							renameAuthoringResource(copied, String(operation.props.name));
+						setAuthoringProperties(copied, operation.props ?? {});
+						destinationPackage.addResource(copied);
+						target.packageId = destinationPackage.getId();
+						target.resourceId = copied.getId();
 						if (operation.clientRef) clientRefs[operation.clientRef] = { ...target };
 					} else if (operation.op === 'move' && target.kind === 'node')
 						component!.moveChild(object as GObject, operation.toIndex!);
@@ -912,6 +1019,7 @@ export function applyDocumentEdits(
 			);
 		}
 	});
+	resolveBatchProperties(document, clientRefs);
 	const diagnostics = compareProjectDiagnostics(before, buildProjectReferenceGraph(document).diagnostics);
 	if (diagnostics.added.some((d) => d.severity === 'error'))
 		throw new DocumentEditError(
