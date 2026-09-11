@@ -76,7 +76,7 @@ test('component replacement retains existing node identities and allocates new n
 	t.is(result.idMap.new, 'n4');
 	t.true(result.xml.includes('target="n4"'));
 });
-import { readComponentXmlFragment } from '../src/authoring/xml-fragment-edit.js';
+import { readComponentXmlFragment } from '../src/index.js';
 
 test('native XML reads return only the explicitly selected structure', t => {
 	const source = '<component size="20,20"><displayList><text id="n0" name="title" text="Hello" vendor="keep"/><graph id="n1" name="other"/></displayList></component>';

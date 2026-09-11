@@ -226,7 +226,7 @@ export {
 } from './utils/index.js';
 
 // Resource references
-export { editComponentXml, type XmlFragmentOperation } from './authoring/xml-fragment-edit.js';
+export { editComponentXml, readComponentXmlFragment, type XmlFragmentOperation } from './authoring/xml-fragment-edit.js';
 export {
 	cloneDocument, readAuthoringProperties, setAuthoringProperties, resolveAuthoringTarget, applyDocumentEdits, DocumentEditError,
 	type AuthoringTarget, type AuthoringScope, type DocumentEditOperation, type DocumentEditResult,
