@@ -5,6 +5,7 @@ import type { ProjectFileTarget } from '../io/project-files.js';
 import {
 	buildProjectReferenceGraph,
 	compareProjectDiagnostics,
+	blockingProjectDiagnostics,
 	type ProjectReferenceEdge,
 	type ProjectReferenceTarget,
 } from '../references/project-reference-graph.js';
@@ -452,6 +453,24 @@ function clearReference(document: Document, edge: ProjectReferenceEdge, removing
 		.find((c) => c.getId() === source.componentId)!;
 	const node = source.nodeId ? component.getChildById(source.nodeId) : null;
 	if (source.nodeId && !node) return;
+	if (node && edge.field.startsWith('controllerOverrides[')) {
+		const values = String(invoke(node, 'getControllerOverrides')).split(',');
+		const retained: string[] = [];
+		for (let i = 0; i + 1 < values.length; i += 2) {
+			const matches =
+				edge.target.kind === 'controller'
+					? values[i] === edge.target.id
+					: values[i] === edge.target.controller && values[i + 1] === edge.target.id;
+			if (!matches) retained.push(values[i]!, values[i + 1]!);
+		}
+		invoke(node, 'setControllerOverrides', retained.join(','));
+		return;
+	}
+	if (node && edge.field === 'instanceController') {
+		invoke(node, 'setInstanceController', '');
+		invoke(node, 'setInstancePage', '');
+		return;
+	}
 	if (edge.cascade === 'unsupported')
 		throw new DocumentEditError('UNSAFE_REFERENCE', '引用无法安全级联清理', edge.field, edge);
 	if (source.gearIndex !== undefined && node) {
@@ -1021,12 +1040,8 @@ export function applyDocumentEdits(
 	});
 	resolveBatchProperties(document, clientRefs);
 	const diagnostics = compareProjectDiagnostics(before, buildProjectReferenceGraph(document).diagnostics);
-	if (diagnostics.added.some((d) => d.severity === 'error'))
-		throw new DocumentEditError(
-			'REFERENCE_VALIDATION_FAILED',
-			'编辑产生了无效引用或身份冲突',
-			undefined,
-			diagnostics.added,
-		);
+	const blocking = blockingProjectDiagnostics(diagnostics, [...affected.values()]);
+	if (blocking.length)
+		throw new DocumentEditError('REFERENCE_VALIDATION_FAILED', '编辑产生了无效引用或身份冲突', undefined, blocking);
 	return { document, affected: [...affected.values()], clientRefs, operationResults, diagnostics };
 }

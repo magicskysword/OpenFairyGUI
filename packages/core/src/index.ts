@@ -232,7 +232,7 @@ export {
 	type AuthoringTarget, type AuthoringScope, type DocumentEditOperation, type DocumentEditResult, type AuthoringImportData,
 } from './authoring/document-edit.js';
 export {
-	buildProjectReferenceGraph, compareProjectDiagnostics, projectReferenceKey,
+	buildProjectReferenceGraph, compareProjectDiagnostics, projectReferenceKey, blockingProjectDiagnostics,
 	type ProjectReferenceGraph, type ProjectReferenceEdge, type ProjectReferenceSource,
 	type ProjectReferenceTarget, type ProjectDiagnostic,
 } from './references/project-reference-graph.js';

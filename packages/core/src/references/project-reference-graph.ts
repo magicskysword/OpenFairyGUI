@@ -3,6 +3,7 @@ import type { Document } from '../document.js';
 import type { Component, GObject } from '../properties/index.js';
 import { parseURL } from '../utils/id-utils.js';
 import { buildResourceReferenceIndex } from './resource-reference-index.js';
+import type { ProjectFileTarget } from '../io/project-files.js';
 
 export interface ProjectReferenceTarget {
 	kind: 'package' | 'resource' | 'node' | 'controller' | 'page' | 'transition';
@@ -252,6 +253,52 @@ export function buildProjectReferenceGraph(document: Document): ProjectReference
 				);
 				nodeEdge(source, stringGetter(owner, 'getGroup'), 'group', 'clear-field', PropertyType.G_GROUP);
 				if (owner === component) continue;
+				const related = stringGetter(owner, 'getInstanceController');
+				if (related) {
+					edges.push({
+						source,
+						target: { ...scope, kind: 'controller', id: related },
+						field: 'instanceController',
+						cascade: 'clear-field',
+					});
+					const page = stringGetter(owner, 'getInstancePage');
+					if (page)
+						edges.push({
+							source,
+							target: { ...scope, kind: 'page', controller: related, id: page },
+							field: 'instancePage',
+							cascade: 'clear-field',
+						});
+				}
+				const overrides = stringGetter(owner, 'getControllerOverrides').split(',').filter(Boolean);
+				const instance = overrides.length
+					? instanceSource(document, scope.packageId, component, owner.getId())
+					: undefined;
+				if (instance) {
+					const instanceScope = { packageId: instance.packageId, componentId: instance.component.getId() };
+					if (overrides.length % 2)
+						diagnostics.push({
+							severity: 'error',
+							code: 'INVALID_CONTROLLER_OVERRIDE',
+							message: '实例控制器覆盖需要名称与页面成对出现',
+							path: sourcePath(source, 'controllerOverrides'),
+						});
+					for (let i = 0; i + 1 < overrides.length; i += 2) {
+						const controller = overrides[i]!;
+						edges.push({
+							source,
+							target: { ...instanceScope, kind: 'controller', id: controller },
+							field: `controllerOverrides[${i}]`,
+							cascade: 'clear-field',
+						});
+						edges.push({
+							source,
+							target: { ...instanceScope, kind: 'page', controller, id: overrides[i + 1]! },
+							field: `controllerOverrides[${i + 1}]`,
+							cascade: 'clear-field',
+						});
+					}
+				}
 				(owner as GObject).listGears().forEach((gear, gearIndex) => {
 					const controller =
 						gear.getController()?.getName() || String(gear.getExtras().controllerName ?? '<missing>');
@@ -385,6 +432,28 @@ export function buildProjectReferenceGraph(document: Document): ProjectReference
 		diagnostics,
 		find: (target) => edges.filter((edge) => projectReferenceKey(edge.target) === projectReferenceKey(target)),
 	};
+}
+
+export function blockingProjectDiagnostics(
+	diagnostics: ReturnType<typeof compareProjectDiagnostics>,
+	affected: readonly ProjectFileTarget[],
+): ProjectDiagnostic[] {
+	return [
+		...diagnostics.added,
+		...diagnostics.existing.filter((d) =>
+			affected.some((target) => {
+				if (target.kind !== 'component') return false;
+				const prefix = `${target.packageId}/${target.componentId}/`;
+				if (d.path.startsWith(prefix)) return true;
+				const dependency = d.reference?.target;
+				return (
+					dependency?.packageId === target.packageId &&
+					(dependency.componentId === target.componentId ||
+						(dependency.kind === 'resource' && dependency.id === target.componentId))
+				);
+			}),
+		),
+	].filter((d) => d.severity === 'error');
 }
 
 /**

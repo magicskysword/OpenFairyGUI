@@ -20,6 +20,61 @@ function fixture() {
 	for (const id of ['a', 'b']) controller.addPage(document.createControllerPage(id).setId(id));
 	return { document, pkg, component, node, controller };
 }
+
+test('page dependencies include source controller overrides and related button pages', (t) => {
+	const f = fixture();
+	const host = f.document.createComponent('Host').setId('host');
+	f.pkg.addResource(host);
+	const instance = f.document
+		.createGComponent('instance')
+		.setId('instance')
+		.setSrc('panel')
+		.setControllerOverrides('mode,a');
+	host.addChild(instance);
+	f.component.addChild(
+		f.document.createGComponent('button').setId('button').setInstanceController('mode').setInstancePage('a'),
+	);
+	const target = {
+		kind: 'page' as const,
+		packageId: 'package1',
+		componentId: 'panel',
+		controllerName: 'mode',
+		pageId: 'a',
+	};
+	t.throws(() => applyDocumentEdits(f.document, [{ op: 'remove', target }]), { code: 'DEPENDENCY_EXISTS' });
+	const result = applyDocumentEdits(f.document, [{ op: 'remove', target, cascade: true }]);
+	const components = result.document.getRoot().listPackages()[0]!.listComponents();
+	t.is((components.find((c) => c.getId() === 'host')!.getChildById('instance') as any).getControllerOverrides(), '');
+	t.is((components.find((c) => c.getId() === 'panel')!.getChildById('button') as any).getInstancePage(), '');
+	t.deepEqual(buildProjectReferenceGraph(result.document).diagnostics, []);
+});
+
+test('historical errors block edits only when their component scope is affected', (t) => {
+	const f = fixture();
+	f.component.setMask('missing');
+	const other = f.document.createComponent('Other').setId('other');
+	f.pkg.addResource(other);
+	t.notThrows(() =>
+		applyDocumentEdits(f.document, [
+			{
+				op: 'update',
+				target: { kind: 'component', packageId: 'package1', componentId: 'other' },
+				props: { width: 100 },
+			},
+		]),
+	);
+	t.throws(
+		() =>
+			applyDocumentEdits(f.document, [
+				{
+					op: 'update',
+					target: { kind: 'node', packageId: 'package1', componentId: 'panel', nodeId: 'n0' },
+					props: { x: 10 },
+				},
+			]),
+		{ code: 'REFERENCE_VALIDATION_FAILED' },
+	);
+});
 test('page cascading preserves other Gear pages and removes each controller action once', (t) => {
 	const f = fixture();
 	f.node.addGear(
