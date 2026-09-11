@@ -178,6 +178,7 @@ test('native controllers, gears, transitions and XML batch references roundtrip 
 	t.is(component.getController('state')!.listPages().length, 2);
 	t.is(component.getChildById('n0')!.listGears()[0]!.getValues(), '0,0|100,20');
 	t.is(component.getTransition('enter')!.listItems()[0]!.getTargetId(), 'n0');
+	t.true(result.affectedReferences.some(edge => edge.source.transition === 'enter' && edge.field === 'targetId'));
 	t.is(component.getChildById(result.clientRefs.box!.nodeId!)!.getX(), 40);
 });
 

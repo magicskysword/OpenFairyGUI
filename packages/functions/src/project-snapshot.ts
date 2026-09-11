@@ -362,13 +362,15 @@ export async function prepareSnapshotEdits(
 	clientRefs: Record<string, AuthoringTarget>;
 	operationResults: Array<{ index: number; op: string; targets: AuthoringTarget[] }>;
 	diagnostics: ReturnType<typeof compareProjectDiagnostics>;
+	affectedReferences: ReturnType<typeof buildProjectReferenceGraph>['edges'];
 }> {
 	if (!operations.length || operations.length > 200)
 		throw new DocumentEditError('INVALID_EDIT', '编辑批次必须包含 1 至 200 项操作');
 	assertAuthoringOperations(operations);
 	let snapshot = source;
 	let document = await snapshot.readDocument();
-	const baseline = buildProjectReferenceGraph(document).diagnostics;
+	const baselineGraph = buildProjectReferenceGraph(document);
+	const baseline = baselineGraph.diagnostics;
 	const clientRefs: Record<string, AuthoringTarget> = {};
 	const changes = new Map<string, SnapshotChange>();
 	const affected: ProjectFileTarget[] = [];
@@ -529,5 +531,11 @@ export async function prepareSnapshotEdits(
 	const consumed = [...inboxPaths].map((relativePath) => ({ relativePath }));
 	for (const change of consumed) changes.set(change.relativePath, change);
 	if (consumed.length) snapshot = await snapshot.withChanges(consumed);
-	return { snapshot, changes: [...changes.values()], clientRefs, operationResults, diagnostics };
+	const targets = operationResults.flatMap(result => result.targets);
+	const affectedReferences = [...new Map([...baselineGraph.edges, ...buildProjectReferenceGraph(document).edges].filter(edge => targets.some(target => {
+		const sourceMatches = edge.source.packageId === target.packageId && (target.kind === 'package' || (target.resourceId ? edge.source.resourceId === target.resourceId : edge.source.componentId === target.componentId));
+		const targetMatches = edge.target.packageId === target.packageId && (target.kind === 'package' || (target.kind === 'resource' ? edge.target.kind === 'resource' && edge.target.id === target.resourceId : edge.target.componentId === target.componentId || (edge.target.kind === 'resource' && edge.target.id === target.componentId)));
+		return sourceMatches || targetMatches;
+	})).map(edge => [JSON.stringify(edge), edge])).values()];
+	return { snapshot, changes: [...changes.values()], clientRefs, operationResults, diagnostics, affectedReferences };
 }
