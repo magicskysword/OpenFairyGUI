@@ -49,6 +49,7 @@ export interface IListBase extends IGObject {
 	selectionMode: number;
 	defaultItem: string;
 	autoResizeItem: boolean;
+	autoClearItems: boolean | null;
 	childrenRenderOrder: number;
 	apexIndex: number;
 	src: string;
@@ -109,6 +110,7 @@ export class GListBase<
 			selectionMode: ListSelectionMode.Single,
 			defaultItem: '',
 			autoResizeItem: true,
+			autoClearItems: null,
 			childrenRenderOrder: 0,
 			apexIndex: 0,
 			src: '',
@@ -213,6 +215,10 @@ export class GListBase<
 
 	public getAutoResizeItem(): boolean { return this.getListProp('autoResizeItem'); }
 	public setAutoResizeItem(v: boolean): this { return this.setListProp('autoResizeItem', v); }
+
+	/** Null inherits the project's list clearing setting. */
+	public getAutoClearItems(): boolean | null { return this.getListProp('autoClearItems'); }
+	public setAutoClearItems(v: boolean | null): this { return this.setListProp('autoClearItems', v); }
 
 	public getChildrenRenderOrder(): number { return this.getListProp('childrenRenderOrder'); }
 	public setChildrenRenderOrder(v: number): this { return this.setListProp('childrenRenderOrder', v); }

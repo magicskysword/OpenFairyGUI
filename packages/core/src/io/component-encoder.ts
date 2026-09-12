@@ -98,6 +98,9 @@ type EncoderChildLike = ChildNode & {
 	getLineCount?(): number;
 	getColumnCount?(): number;
 	getAutoResizeItem?(): boolean;
+	getAutoClearItems?(): boolean | null;
+	getAutoClearText?(): boolean;
+	getClearOnPublish?(): boolean;
 	getChildrenRenderOrder?(): number;
 	getApexIndex?(): number;
 	getGroup?(): string;
@@ -594,7 +597,7 @@ function _resolveChildObjectType(child: EncoderChildLike): number {
 	return OBJECT_TYPE_MAP[child.propertyType as string] ?? 2;
 }
 
-function _writeDisplayList(buf: WriteBuffer, comp: Component, _doc: Document, pkg: Package, version: number): void {
+function _writeDisplayList(buf: WriteBuffer, comp: Component, doc: Document, pkg: Package, version: number): void {
 	const children = getRuntimeChildren(comp);
 	const childIndexMap = getRuntimeChildIndexMap(comp);
 	buf.writeInt16(children.length);
@@ -758,7 +761,7 @@ function _writeDisplayList(buf: WriteBuffer, comp: Component, _doc: Document, pk
 
 			// Block 8: static list items
 			cb8 = buf.pos - childIndexPos;
-			_writeListItems(buf, child, pkg, version);
+			_writeListItems(buf, child, pkg, version, doc.getRoot().getSettings().common?.listClearOnPublish === true);
 
 			if (isTree) {
 				cb9 = buf.pos - childIndexPos;
@@ -1502,7 +1505,7 @@ function _writeChildSpecific(buf: WriteBuffer, child: EncoderChildLike, pkg: Pac
 			break;
 
 		case 'GLoader': {
-			buf.writeS(remapLocalUiUrl(pkg, child.getUrl?.() ?? null));
+			buf.writeS(child.getClearOnPublish?.() ? null : remapLocalUiUrl(pkg, child.getUrl?.() ?? null));
 			buf.writeUint8(child.getAlign?.() ?? 0);
 			buf.writeUint8(child.getVAlign?.() ?? 0);
 			buf.writeUint8(child.getFill?.() ?? 0);
@@ -1634,7 +1637,7 @@ function _writeChildAfterAdd(buf: WriteBuffer, child: EncoderChildLike, comp: Co
 		case 'GRichTextField':
 		case 'GTextInput':
 			// GTextField.setup_afterAdd: readS() → text — noCache
-			buf.writeSEx(remapLocalUiRefsInText(pkg, child.getText?.() ?? null), true);
+			buf.writeSEx(child.getAutoClearText?.() ? null : remapLocalUiRefsInText(pkg, child.getText?.() ?? null), true);
 			break;
 
 		case 'GButton': {
@@ -1914,11 +1917,11 @@ function _writeScrollPane(buf: WriteBuffer, child: EncoderChildLike, pkg: Packag
 
 // ─── GList items (block 8) ───────────────────────────────────────────────
 
-function _writeListItems(buf: WriteBuffer, child: EncoderChildLike, pkg: Package, version: number): void {
+function _writeListItems(buf: WriteBuffer, child: EncoderChildLike, pkg: Package, version: number, clearByDefault: boolean): void {
 	buf.writeS(remapLocalUiUrl(pkg, child.getDefaultItem?.() ?? null));
 
 	const isTree = child.propertyType === 'GTree';
-	const listItems: ListItemLike[] = child.getListItems?.() ?? [];
+	const listItems: ListItemLike[] = (child.getAutoClearItems?.() ?? clearByDefault) ? [] : child.getListItems?.() ?? [];
 	buf.writeInt16(listItems.length);
 	for (const item of listItems) {
 		const itemStart = buf.pos;

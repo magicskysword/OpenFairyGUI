@@ -622,6 +622,7 @@ type WritableChild = GObject & {
 	getLineCount?(): number;
 	getColumnCount?(): number;
 	getAutoResizeItem?(): boolean;
+	getAutoClearItems?(): boolean | null;
 	getOverflow?(): number;
 	getScrollType?(): number;
 	getScrollBarFlags?(): number;
@@ -1955,6 +1956,8 @@ export class ProjectWriter {
 				writeXmlAttr(attrs, PROJECT_XML_PROTOCOL.list.attrs.lineItemCount2, String(lineCount));
 			}
 			if (typedObj.getAutoResizeItem?.() === false) writeXmlAttr(attrs, PROJECT_XML_PROTOCOL.list.attrs.autoResizeItem, 'false');
+			const autoClearItems = typedObj.getAutoClearItems?.();
+			if (autoClearItems != null) writeXmlAttr(attrs, PROJECT_XML_PROTOCOL.list.attrs.autoClearItems, String(autoClearItems));
 			const selectionMode = typedObj.getSelectionMode?.();
 			if (selectionMode !== undefined && selectionMode !== 0) {
 				const selectionName: Record<number, string> = {

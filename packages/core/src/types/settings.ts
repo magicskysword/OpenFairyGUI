@@ -38,6 +38,7 @@ export interface PublishSettings {
 }
 
 export interface CommonSettings {
+	listClearOnPublish?: boolean;
 	font?: string;
 	fontSize?: number;
 	textColor?: string;

@@ -2605,6 +2605,8 @@ export class ProjectReader {
 				}
 				const autoResizeItem = readXmlAttr<string | boolean>(attrs, PROJECT_XML_PROTOCOL.list.attrs.autoResizeItem);
 				if (autoResizeItem !== undefined) g.setAutoResizeItem?.(parseBool(autoResizeItem));
+				const autoClearItems = readXmlAttr<string | boolean>(attrs, PROJECT_XML_PROTOCOL.list.attrs.autoClearItems);
+				if (autoClearItems !== undefined) g.setAutoClearItems(parseBool(autoClearItems));
 				const selectionMode = readXmlAttr<string>(attrs, PROJECT_XML_PROTOCOL.list.attrs.selectionMode);
 				if (selectionMode) {
 					const selMap: Record<string, number> = { single: 0, multiple: 1, multipleSingleClick: 2, none: 3 };
