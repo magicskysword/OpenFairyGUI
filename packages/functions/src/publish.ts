@@ -15,7 +15,7 @@ import {
 	type SpineResource,
 	type Transform,
 } from '@magicskysword/openfairygui-core';
-import { type AtlasOptions, atlas } from './atlas.js';
+import { type AtlasOptions, atlas, prepareFontResource } from './atlas.js';
 import { publishCodeGeneration, resolveProjectBasePath } from './codegen.js';
 import { formatPluginError, type LoadedPlugin } from './plugins/types.js';
 import type { AtlasRasterBackend, PublishFileSystem } from './publish/contracts.js';
@@ -686,8 +686,13 @@ function collectPackagePublishContext(
 			changed = false;
 			for (const resourceId of [...exportedResourceIds]) {
 				const resource = resourcesById.get(resourceId);
-				if (!resource || !isSkeletonResource(resource)) continue;
-				for (const requiredId of resource.getRequireIds()) {
+				if (!resource) continue;
+				const requiredIds = isSkeletonResource(resource)
+					? resource.getRequireIds()
+					: isFontResource(resource)
+						? [resource.getTextureId(), ...resource.listGlyphs().map((glyph) => glyph.getImg())]
+						: [];
+				for (const requiredId of requiredIds) {
 					if (!requiredId || exportedResourceIds.has(requiredId)) continue;
 					exportedResourceIds.add(requiredId);
 					changed = true;
@@ -972,6 +977,7 @@ async function applyPixelHitTests(
 }
 
 async function annotatePackagePublishArtifacts(
+	doc: Document,
 	pkg: Package,
 	basePath: string | undefined,
 	encoder: AtlasRasterBackend | undefined,
@@ -980,8 +986,17 @@ async function annotatePackagePublishArtifacts(
 		includeBranches: boolean;
 		activeBranch: string;
 		includeHighResolution: number;
+		readFileRaw?: PublishFileSystem['readFileRaw'];
 	},
 ): Promise<void> {
+	const selected = collectPackagePublishContext(pkg, options).publishedResourceIds;
+	for (const resource of pkg.listResources()) {
+		if (!isFontResource(resource) || !selected.has(resource.getId())) continue;
+		await prepareFontResource(doc, resource, pkg, {
+			basePath: basePath ? resolvePackageAssetsBasePath(basePath, resource) : undefined,
+			readFileRaw: options.readFileRaw,
+		});
+	}
 	const {
 		publishedResourceIds,
 		exportedResourceIds,
@@ -1339,11 +1354,12 @@ export function publish(options: PublishOptions): Transform {
 			// Compute dependency list and selected publish artifacts before atlas packing,
 			// so merged-branch publishes can pack the overridden resources with main IDs.
 			_computeDependencies(doc, pkg, pkgMap);
-			await annotatePackagePublishArtifacts(pkg, options.basePath, options.encoder, {
+			await annotatePackagePublishArtifacts(doc, pkg, options.basePath, options.encoder, {
 				projectType: resolved.projectType,
 				includeBranches: resolved.includeBranches,
 				activeBranch: resolved.activeBranch,
 				includeHighResolution: resolved.includeHighResolution,
+				readFileRaw: options.atlas?.readFileRaw ?? options.fs?.readFileRaw,
 			});
 		}
 

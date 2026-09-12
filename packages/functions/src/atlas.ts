@@ -578,7 +578,7 @@ export function atlas(_options: AtlasOptions = {}): Transform {
 						!referencedIds.has(resId)
 					)
 						continue;
-					await _collectFontTexture(doc, res, pkg, options);
+					await prepareFontResource(doc, res, pkg, options);
 				}
 			}
 
@@ -1915,12 +1915,12 @@ function _readUint32BE(data: Uint8Array, offset: number): number {
 	);
 }
 
-/** Collect a Bitmap Font's texture image, packed under the font's ID. */
-async function _collectFontTexture(
+/** Load bitmap font glyphs before selecting and packing their image dependencies. @internal */
+export async function prepareFontResource(
 	doc: Document,
 	fontRes: FontResource,
 	pkg: Package,
-	options: AtlasOptions,
+	options: Pick<AtlasOptions, 'basePath' | 'readFileRaw'>,
 ): Promise<void> {
 	const textureId = fontRes.getTextureId?.() ?? '';
 
@@ -1934,13 +1934,14 @@ async function _collectFontTexture(
 
 	// Parse .fnt file for glyph data (needed for binary encoding)
 	// This applies to ALL fonts, not just those with a textureId
-	if (options.readFileRaw && options.basePath) {
-		const fontName = resolveFontFileName(fontRes.getName());
+	const sourceData = fontRes.getSourceData()?.getData();
+	if (sourceData || (options.readFileRaw && options.basePath)) {
+		const fontName = fontRes.getFileName() || resolveFontFileName(fontRes.getName());
 		const fontPath = fontRes.getPath() ?? '/';
 		const pkgName = pkg.getName();
 		const fntFile = `${options.basePath}/${pkgName}${fontPath}${fontName}`;
 		try {
-			const fntData = await options.readFileRaw(fntFile);
+			const fntData = sourceData ?? (await options.readFileRaw!(fntFile));
 			const fntText = new TextDecoder().decode(fntData);
 			const fntParsed = _parseFnt(fntText);
 			for (const glyph of fontRes.listGlyphs()) {
