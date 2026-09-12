@@ -167,6 +167,7 @@ function getPublishedItemId(resource: { getId(): string; getExtras(): ExtrasMap 
 }
 
 interface AtlasReferenceItem {
+	properties?: Array<{ propertyId: number; value: string }>;
 	icon?: string | null;
 	url?: string | null;
 }
@@ -188,6 +189,7 @@ interface TransitionWithAtlasRefs {
 }
 
 interface ChildWithReferenceUrls extends HasOptionalSrc, HasOptionalUrl {
+	getPropertyOverrides?(): Array<{ propertyId: number; value: string }>;
 	getDefaultItem?(): string;
 	getIcon?(): string;
 	getSelectedIcon?(): string;
@@ -335,6 +337,9 @@ async function resolveEditorCompatibleResourceOrder(
 		if (!component) continue;
 		for (const child of component.listChildren()) {
 			const refChild = child as ChildWithReferenceUrls;
+			for (const property of refChild.getPropertyOverrides?.() ?? []) {
+				if (property.propertyId === 1) await addResourceByLocalUiUrl(property.value);
+			}
 			await addResource(resourceMap.get(refChild.getSrc?.() ?? ''));
 			for (const ref of [
 				refChild.getUrl?.(),
@@ -357,6 +362,9 @@ async function resolveEditorCompatibleResourceOrder(
 				await addResourceByLocalUiUrl(item.icon ?? undefined);
 			}
 			for (const item of refChild.getListItems?.() ?? []) {
+				for (const property of item.properties ?? []) {
+					if (property.propertyId === 1) await addResourceByLocalUiUrl(property.value);
+				}
 				await addResourceByLocalUiUrl(item.icon ?? undefined);
 				await addResourceByLocalUiUrl(item.url ?? undefined);
 			}
@@ -469,6 +477,9 @@ export function atlas(_options: AtlasOptions = {}): Transform {
 			function collectRefs(component: Component, visited: Set<string>): void {
 				for (const child of component.listChildren()) {
 					const refChild = child as ChildWithReferenceUrls;
+					for (const property of refChild.getPropertyOverrides?.() ?? []) {
+						if (property.propertyId === 1) addUiResourceRef(referencedIds, property.value);
+					}
 					const src = refChild.getSrc?.();
 					if (src && !visited.has(src)) {
 						referencedIds.add(src);
@@ -498,6 +509,9 @@ export function atlas(_options: AtlasOptions = {}): Transform {
 						addUiResourceRef(referencedIds, item.icon ?? undefined);
 					}
 					for (const item of refChild.getListItems?.() ?? []) {
+						for (const property of item.properties ?? []) {
+							if (property.propertyId === 1) addUiResourceRef(referencedIds, property.value);
+						}
 						addUiResourceRef(referencedIds, item.icon ?? undefined);
 					}
 					for (const gear of refChild.listGears?.() ?? []) {

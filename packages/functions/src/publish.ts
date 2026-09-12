@@ -204,6 +204,7 @@ interface PackagePublishContext {
 }
 
 interface ChildReferenceItem {
+	properties?: Array<{ propertyId: number; value: string }>;
 	icon?: string | null;
 	url?: string | null;
 }
@@ -223,6 +224,7 @@ interface TransitionWithPublishRefs {
 }
 
 interface ChildWithPublishRefs extends HasOptionalFont {
+	getPropertyOverrides?(): Array<{ propertyId: number; value: string }>;
 	getId?(): string;
 	getPackageId?(): string;
 	getSrc?(): string;
@@ -727,6 +729,9 @@ function collectPackagePublishContext(
 		}
 
 		for (const child of children) {
+			for (const property of child.getPropertyOverrides?.() ?? []) {
+				if (property.propertyId === 1) addLocalUiResourceRef(referencedIds, pkgId, property.value);
+			}
 			const src = child.getSrc?.();
 			if (src) referencedIds.add(src);
 			addLocalFontRef(referencedIds, pkgId, child.getFont?.());
@@ -752,6 +757,9 @@ function collectPackagePublishContext(
 				addLocalUiResourceRef(referencedIds, pkgId, item.icon ?? undefined);
 			}
 			for (const item of child.getListItems?.() ?? []) {
+				for (const property of item.properties ?? []) {
+					if (property.propertyId === 1) addLocalUiResourceRef(referencedIds, pkgId, property.value);
+				}
 				addLocalUiResourceRef(referencedIds, pkgId, item.icon ?? undefined);
 				addLocalUiResourceRef(referencedIds, pkgId, item.url ?? undefined);
 			}
@@ -1485,6 +1493,9 @@ function _computeDependencies(doc: Document, pkg: Package, pkgMap: Map<string, P
 		if (res.propertyType !== 'Component') continue;
 		const component = res as ComponentWithPublishRefs;
 		for (const child of component.listChildren?.() ?? []) {
+			for (const property of child.getPropertyOverrides?.() ?? []) {
+				if (property.propertyId === 1) addDependencyPackageIdFromUiValue(property.value);
+			}
 			addDependencyPackageId(child.getPackageId?.());
 			addDependencyFontRef(child.getFont?.());
 			addDependencyPackageIdsFromText(child.getText?.());
@@ -1509,6 +1520,9 @@ function _computeDependencies(doc: Document, pkg: Package, pkgMap: Map<string, P
 				addDependencyPackageIdFromUiValue(item.icon ?? undefined);
 			}
 			for (const item of child.getListItems?.() ?? []) {
+				for (const property of item.properties ?? []) {
+					if (property.propertyId === 1) addDependencyPackageIdFromUiValue(property.value);
+				}
 				addDependencyPackageIdFromUiValue(item.icon ?? undefined);
 				addDependencyPackageIdFromUiValue(item.url ?? undefined);
 			}
