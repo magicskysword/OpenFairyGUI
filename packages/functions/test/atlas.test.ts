@@ -283,13 +283,13 @@ test('atlas: multi-page auto output skips every fixed page index', async (t) => 
 			atlasFiles,
 			[
 				'MixedPages_atlas0.png',
+				'MixedPages_atlas0_1.png',
+				'MixedPages_atlas0_2.png',
 				'MixedPages_atlas1.png',
 				'MixedPages_atlas2.png',
-				'MixedPages_atlas3.png',
-				'MixedPages_atlas4.png',
 			],
 		);
-		t.deepEqual(atlasIndexes, [0, 1, 2, 3, 4]);
+		t.deepEqual(atlasIndexes, [0, 1, 2, 100, 101]);
 		t.is(new Set(atlasFiles).size, atlasFiles.length, 'every generated artifact file name is unique');
 		t.is(new Set(atlasIndexes).size, atlasIndexes.length, 'every runtime atlas index is unique');
 	} finally {
@@ -479,6 +479,7 @@ test('atlas: standalone textureSetMode and fixed page outputs use editor-style f
 			['AtlasModes_atlas0.png', 'AtlasModes_atlas1.png', 'AtlasModes_atlas_cover01.jpg'],
 			'atlas nodes keep standalone and fixed-page file names',
 		);
+		t.is(pkg.listAtlases().find(page => page.getFile().includes('cover01'))?.getName(), 'atlas_cover01');
 	} finally {
 		await fs.rm(tmpDir, { recursive: true, force: true });
 	}

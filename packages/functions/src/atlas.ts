@@ -620,6 +620,7 @@ export function atlas(_options: AtlasOptions = {}): Transform {
 			);
 			const branchGroups = buildBranchAtlasGroups(doc, autoInputs, options, branchOrdinalByName);
 			const pageAllocators = new Map<number, AtlasPageIndexAllocator>();
+			let nextOverflowIndex = (Math.max(0, ...branchOrdinalByName.values()) + 1) * 100;
 			const pageAllocatorFor = (branchOrdinal: number): AtlasPageIndexAllocator => {
 				let allocator = pageAllocators.get(branchOrdinal);
 				if (!allocator) {
@@ -652,11 +653,14 @@ export function atlas(_options: AtlasOptions = {}): Transform {
 					continue;
 				}
 				const pageAllocator = pageAllocatorFor(group.branchOrdinal);
+				const firstPageIndex = pageAllocator.allocate();
+				const firstFileName = resolveAtlasOutputFileName(pkg, firstPageIndex, group.branchName);
 				const emittedPageCount = await emitPagedAtlasGroup(doc, pkg, allResources, group.inputs, {
 					branchName: group.branchName,
 					branchOrdinal: group.branchOrdinal,
-					pageIndexAt: () => pageAllocator.allocate(),
-					fileNameAt: (pageIndex) => resolveAtlasOutputFileName(pkg, pageIndex, group.branchName),
+					pageIndexAt: () => firstPageIndex,
+					runtimeIndexAt: (pageOffset) => pageOffset === 0 ? resolveAtlasIndex(group.branchOrdinal, firstPageIndex) : nextOverflowIndex++,
+					fileNameAt: (_pageIndex, pageOffset) => pageOffset === 0 ? firstFileName : insertFileNameSuffix(firstFileName, `_${pageOffset}`),
 					options,
 					encoder,
 					logger,
@@ -780,7 +784,8 @@ async function emitPagedAtlasGroup(
 		branchName: string;
 		branchOrdinal: number;
 		pageIndexAt: (pageOffset: number) => number;
-		fileNameAt: (pageIndex: number) => string;
+		fileNameAt: (pageIndex: number, pageOffset: number) => string;
+		runtimeIndexAt?: (pageOffset: number) => number;
 		options: AtlasOptions;
 		encoder: AtlasRasterBackend | undefined;
 		logger: ILogger;
@@ -794,9 +799,10 @@ async function emitPagedAtlasGroup(
 	for (let pageOffset = 0; pageOffset < pages.length; pageOffset += 1) {
 		const page = pages[pageOffset];
 		const pageIndex = context.pageIndexAt(pageOffset);
-		const atlasNode = doc.createAtlas(`atlas${resolveAtlasIndex(context.branchOrdinal, pageIndex)}`);
-		atlasNode.setIndex(resolveAtlasIndex(context.branchOrdinal, pageIndex));
-		atlasNode.setFile(context.fileNameAt(pageIndex));
+		const runtimeIndex = context.runtimeIndexAt?.(pageOffset) ?? resolveAtlasIndex(context.branchOrdinal, pageIndex);
+		const atlasNode = doc.createAtlas(`atlas${runtimeIndex}`);
+		atlasNode.setIndex(runtimeIndex);
+		atlasNode.setFile(context.fileNameAt(pageIndex, pageOffset));
 		atlasNode.setWidth(page.width);
 		atlasNode.setHeight(page.height);
 		pkg.addAtlas(atlasNode);
@@ -849,7 +855,8 @@ async function emitStandaloneAtlasGroup(
 		const baseFileName = resolveStandaloneAtlasOutputFileName(pkg, group.resource, group.branchName);
 		const atlasFileName = pages.length <= 1 ? baseFileName : insertFileNameSuffix(baseFileName, `_${pageOffset}`);
 		const atlasIndex = context.atlasIndexAt(pageOffset);
-		const atlasNode = doc.createAtlas(`atlas${resolveAtlasIndex(group.branchOrdinal, atlasIndex)}`);
+		const atlasId = `atlas_${getPublishedItemId(group.resource)}${group.branchName ? `_${group.branchName}` : ''}${pageOffset ? `_${pageOffset}` : ''}`;
+		const atlasNode = doc.createAtlas(atlasId);
 		atlasNode.setIndex(resolveAtlasIndex(group.branchOrdinal, atlasIndex));
 		atlasNode.setFile(atlasFileName);
 		const standaloneSize = resolveStandaloneAtlasSize(page.width, page.height, group.sizeMode, context.options);
