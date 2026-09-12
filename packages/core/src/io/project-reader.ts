@@ -2689,7 +2689,8 @@ export class ProjectReader {
 		}
 		readCommonDisplayState(attrs, obj as WritableCommonDisplayState, objectProtocol);
 		// Parse gear elements
-		for (const gearTag of getProtocolGearChildNames(objectProtocol)) {
+		const gearNames = new Set(getProtocolGearChildNames(objectProtocol));
+		for (const gearTag of Object.keys(attrs).filter(name => gearNames.has(name))) {
 			const gearDefs = ensureArray(attrs[gearTag]);
 			for (const gearDef of gearDefs) {
 				const parsedGear = getXmlNode<GearXmlNode>(gearDef);

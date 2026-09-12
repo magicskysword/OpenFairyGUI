@@ -25,7 +25,7 @@ test('reader accepts editor group layouts, button effects, ellipsis and transiti
 				path.join(assets, 'Main.xml'),
 				`<component size="100,100" extention="Button"><displayList>
 				<group id="hz" layout="hz" advanced="true"/><group id="vt" layout="vt" advanced="true"/>
-				<richtext id="rich" autoSize="ellipsis"/><inputtext id="input" autoSize="ellipsis"/>
+				<richtext id="rich" autoSize="ellipsis"><gearText pages="0" values="label"/><gearColor pages="0" values="#ffffff"/></richtext><inputtext id="input" autoSize="ellipsis"/>
 			</displayList><Button downEffect="${effect}" downEffectValue=".8"/>
 			<transition name="t0" frameRate="30"><item time="30" type="Alpha" target="rich" value=".5"/></transition></component>`,
 			);
@@ -37,6 +37,7 @@ test('reader accepts editor group layouts, button effects, ellipsis and transiti
 			t.is((children[0] as GGroup).getLayout(), 1);
 			t.is((children[1] as GGroup).getLayout(), 2);
 			t.is((children[2] as GRichTextField).getAutoSize(), 4);
+			t.deepEqual(children[2].listGears().map(gear => gear.getGearType()), [6, 4]);
 			t.is((children[3] as GTextInput).getAutoSize(), 4);
 			t.is(component.listTransitions()[0].getFps(), 30);
 			const binary = path.join(directory, 'UI.bytes');
