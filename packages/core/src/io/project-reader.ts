@@ -1583,7 +1583,8 @@ export class ProjectReader {
 								if (readXmlAttr(extAttrs, EXTENSION_PROTOCOL_MAP.Button.attrs.mode) !== undefined) comp.setButtonMode?.(parseButtonMode(readXmlAttr(extAttrs, EXTENSION_PROTOCOL_MAP.Button.attrs.mode)!));
 								if (readXmlAttr(extAttrs, EXTENSION_PROTOCOL_MAP.Button.attrs.sound) !== undefined) comp.setSound?.(String(readXmlAttr(extAttrs, EXTENSION_PROTOCOL_MAP.Button.attrs.sound)));
 								if (readXmlAttr(extAttrs, EXTENSION_PROTOCOL_MAP.Button.attrs.soundVolumeScale) !== undefined) comp.setSoundVolumeScale?.(parseFloat2(readXmlAttr(extAttrs, EXTENSION_PROTOCOL_MAP.Button.attrs.soundVolumeScale), 1));
-								if (readXmlAttr(extAttrs, EXTENSION_PROTOCOL_MAP.Button.attrs.downEffect) !== undefined) comp.setDownEffect?.(parseInt2(readXmlAttr(extAttrs, EXTENSION_PROTOCOL_MAP.Button.attrs.downEffect)));
+								const downEffect = readXmlAttr<string | number>(extAttrs, EXTENSION_PROTOCOL_MAP.Button.attrs.downEffect);
+								if (downEffect !== undefined) comp.setDownEffect?.(({ dark: 1, scale: 2 } as Record<string, number>)[String(downEffect)] ?? parseInt2(downEffect));
 								if (readXmlAttr(extAttrs, EXTENSION_PROTOCOL_MAP.Button.attrs.downEffectValue) !== undefined) comp.setDownEffectValue?.(parseFloat2(readXmlAttr(extAttrs, EXTENSION_PROTOCOL_MAP.Button.attrs.downEffectValue), 0.8));
 								break;
 							case 'ComboBox':
@@ -2052,7 +2053,7 @@ export class ProjectReader {
 				const richTextUbb = readXmlAttr<string | boolean>(attrs, PROJECT_XML_PROTOCOL.text.attrs.ubb);
 				if (richTextUbb !== undefined) g.setUbbEnabled?.(parseBool(richTextUbb));
 				const richTextAutoSize = readXmlAttr<string>(attrs, PROJECT_XML_PROTOCOL.text.attrs.autoSize);
-				if (richTextAutoSize) { const m: Record<string,number> = {none:0,both:1,height:2,shrink:3}; g.setAutoSize(m[richTextAutoSize]??1); }
+				if (richTextAutoSize) { const m: Record<string,number> = {none:0,both:1,height:2,shrink:3,ellipsis:4}; g.setAutoSize(m[richTextAutoSize]??1); }
 				const richTextSingleLine = readXmlAttr<string | boolean>(attrs, PROJECT_XML_PROTOCOL.text.attrs.singleLine);
 				if (richTextSingleLine !== undefined) g.setSingleLine?.(parseBool(richTextSingleLine));
 				const richTextAutoClearText = readXmlAttr<string | boolean>(attrs, PROJECT_XML_PROTOCOL.text.attrs.autoClearText);
@@ -2141,7 +2142,7 @@ export class ProjectReader {
 				const inputLetterSpacing = readXmlAttr<string | number>(attrs, PROJECT_XML_PROTOCOL.text.attrs.letterSpacing);
 				if (inputLetterSpacing !== undefined) g.setLetterSpacing?.(parseInt2(inputLetterSpacing));
 				const inputAutoSize = readXmlAttr<string>(attrs, PROJECT_XML_PROTOCOL.text.attrs.autoSize);
-				if (inputAutoSize) { const m: Record<string,number> = {none:0,both:1,height:2,shrink:3}; g.setAutoSize(m[inputAutoSize]??1); }
+				if (inputAutoSize) { const m: Record<string,number> = {none:0,both:1,height:2,shrink:3,ellipsis:4}; g.setAutoSize(m[inputAutoSize]??1); }
 				const inputSingleLine = readXmlAttr<string | boolean>(attrs, PROJECT_XML_PROTOCOL.text.attrs.singleLine);
 				if (inputSingleLine !== undefined) g.setSingleLine?.(parseBool(inputSingleLine));
 				const inputAutoClearText = readXmlAttr<string | boolean>(attrs, PROJECT_XML_PROTOCOL.text.attrs.autoClearText);
@@ -2272,7 +2273,7 @@ export class ProjectReader {
 				if (groupVisible !== undefined) g.setVisible(parseBool(groupVisible));
 				const groupLayout = readXmlAttr<string>(attrs, PROJECT_XML_PROTOCOL.group.attrs.layout);
 				if (groupLayout) {
-					const layoutMap: Record<string, number> = { none: 0, horizontal: 1, vertical: 2 };
+					const layoutMap: Record<string, number> = { none: 0, horizontal: 1, vertical: 2, hz: 1, vt: 2 };
 					g.setLayout(layoutMap[groupLayout] ?? 0);
 				}
 				const groupLineGap = readXmlAttr<string | number>(attrs, PROJECT_XML_PROTOCOL.group.attrs.lineGap);
