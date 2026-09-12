@@ -2129,7 +2129,7 @@ function _parseFnt(text: string): {
 		hasChannel,
 		fontSize,
 		xadvance: globalXadvance,
-		lineHeight,
+		lineHeight: lineHeight || fontSize,
 		glyphs,
 	};
 }

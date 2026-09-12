@@ -65,6 +65,7 @@ test('publish includes glyph images of selected file-backed bitmap fonts', async
 			['digits', 'digits_0'],
 		);
 		t.is((result.getResourceById('digits') as FontResource).listGlyphs()[0].getImg(), 'digits_0');
+		t.is((result.getResourceById('digits') as FontResource).getLineHeight(), 12);
 		t.deepEqual(
 			result.listAtlases().flatMap((atlas) => atlas.listSprites().map((sprite) => sprite.getItemId())),
 			['digits_0'],
