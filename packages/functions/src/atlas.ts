@@ -1014,9 +1014,9 @@ async function writeAtlasPageImage(
 					continue;
 				}
 				const filePath = _resolveImagePath(input.resource, pkg, options.basePath!);
-				imageBuffer = await encoder(filePath).toBuffer();
+				imageBuffer = await encoder(filePath).png().toBuffer();
 			}
-			if (packedRect.rotated) imageBuffer = await encoder(imageBuffer).rotate(270).toBuffer();
+			if (packedRect.rotated) imageBuffer = await encoder(imageBuffer).rotate(270).png().toBuffer();
 			compositeInputs.push({
 				input: imageBuffer,
 				left: packedRect.x,
