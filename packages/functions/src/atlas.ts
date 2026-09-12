@@ -828,7 +828,11 @@ async function emitStandaloneAtlasGroup(
 	},
 ): Promise<number> {
 	if (group.inputs.length === 0) return 0;
-	const pages = packAtlasPages(
+	const image = group.inputs.length === 1 && isImageResource(group.resource) ? group.inputs[0] : undefined;
+	const pages = image ? [{
+		width: image.width, height: image.height,
+		outputRects: [{ index: 0, x: 0, y: 0, width: image.width, height: image.height, rotated: false }],
+	}] : packAtlasPages(
 		group.inputs,
 		context.options,
 		true,
@@ -1575,7 +1579,7 @@ async function _collectImage(
 		offY = 0;
 	let trimBuf: Uint8Array | undefined;
 
-	if (doTrim && sourceHasAlpha && options.basePath && encoder) {
+	if (doTrim && !resource.getDisableTrim() && sourceHasAlpha && options.basePath && encoder) {
 		const filePath = _resolveImagePath(resource, pkg, options.basePath);
 		try {
 			const trimResult = await _trimImage(encoder, rasterizedBuffer ?? filePath, origW, origH);

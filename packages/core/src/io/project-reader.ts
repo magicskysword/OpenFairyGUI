@@ -1288,6 +1288,8 @@ export class ProjectReader {
 				res.setBranch(branchName);
 				res.setExported(exported);
 				res.setFileName(name);
+				const disableTrim = readXmlAttr<string | boolean>(attrs, PROJECT_XML_PROTOCOL.packageImageResource.attrs.disableTrim);
+				if (disableTrim !== undefined) res.setDisableTrim(parseBool(disableTrim));
 				const textureSetMode = readXmlAttr<string>(attrs, PROJECT_XML_PROTOCOL.packageImageResource.attrs.atlas);
 				if (textureSetMode !== undefined) res.setTextureSetMode(textureSetMode);
 				const scale = readXmlAttr<string>(attrs, PROJECT_XML_PROTOCOL.packageImageResource.attrs.scale);

@@ -77,6 +77,7 @@ const PACKAGE_RESOURCE_BASE_ATTRS = {
 } satisfies XmlAttrMap;
 
 const PACKAGE_IMAGE_RESOURCE_ATTRS = {
+	disableTrim: { canonical: 'disableTrim' },
 	atlas: { canonical: 'atlas' },
 	scale: { canonical: 'scale' },
 	scale9grid: { canonical: 'scale9grid' },

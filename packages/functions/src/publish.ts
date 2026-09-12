@@ -326,10 +326,10 @@ export function resolvePublishOptions(
 		fast: overrides.atlas?.fast ?? atlasSetting.fast ?? true,
 		allowRotation: overrides.atlas?.allowRotation ?? atlasSetting.allowRotation ?? false,
 		padding: overrides.atlas?.padding ?? atlasSetting.padding ?? 2,
-		powerOfTwo: overrides.atlas?.powerOfTwo ?? atlasSetting.sizeOption === 'pot',
+		powerOfTwo: overrides.atlas?.powerOfTwo ?? (atlasSetting.sizeOption ?? 'pot') === 'pot',
 		square: overrides.atlas?.square ?? atlasSetting.forceSquare ?? false,
 		multiPage: overrides.atlas?.multiPage ?? atlasSetting.paging ?? true,
-		trimImage: overrides.atlas?.trimImage ?? atlasSetting.trimImage ?? false,
+		trimImage: overrides.atlas?.trimImage ?? atlasSetting.trimImage ?? true,
 		extractAlpha: overrides.atlas?.extractAlpha ?? atlasSetting.extractAlpha ?? false,
 	};
 

@@ -24,6 +24,7 @@ interface IImageResource extends IExtensibleProperty {
 	qualityOption: string;
 	smoothing: boolean;
 	duplicatePadding: boolean;
+	disableTrim: boolean;
 	scaleOption: number;
 	scale9Grid: [number, number, number, number] | null;
 	tileGridIndice: number;
@@ -60,6 +61,7 @@ export class ImageResource extends ExtensibleProperty<IImageResource> {
 			qualityOption: '',
 			smoothing: true,
 			duplicatePadding: false,
+			disableTrim: false,
 			scaleOption: 0,
 			scale9Grid: null,
 			tileGridIndice: 0,
@@ -71,6 +73,8 @@ export class ImageResource extends ExtensibleProperty<IImageResource> {
 	}
 
 	public getId(): string { return this.get('id'); }
+	public getDisableTrim(): boolean { return this.get('disableTrim'); }
+	public setDisableTrim(v: boolean): this { return this.set('disableTrim', v); }
 	public setId(id: string): this { return this.set('id', id); }
 
 	public getFileName(): string { return this.get('fileName'); }
