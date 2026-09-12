@@ -979,8 +979,12 @@ function attachSpritesToAtlas(
 }
 
 async function writeAtlasOutput(pipeline: AtlasRasterPipeline, outputFile: string, options: AtlasOptions): Promise<void> {
-	if (options.writeFileRaw) await options.writeFileRaw(outputFile, await pipeline.png().toBuffer());
-	else await pipeline.toFile(outputFile);
+	if (!options.writeFileRaw) { await pipeline.toFile(outputFile); return; }
+	if (/\.jpe?g$/i.test(outputFile)) {
+		if (!pipeline.jpeg) throw new Error('atlas: JPEG output requires a raster backend with JPEG encoding.');
+		pipeline = pipeline.jpeg();
+	} else pipeline = pipeline.png();
+	await options.writeFileRaw(outputFile, await pipeline.toBuffer());
 }
 
 async function writeAtlasPageImage(

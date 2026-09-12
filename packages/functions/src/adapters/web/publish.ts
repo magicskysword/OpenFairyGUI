@@ -146,16 +146,16 @@ function imageMimeTypeFromBytes(bytes: Uint8Array): string {
 	return 'image/png';
 }
 
-async function canvasToPng(canvas: BrowserCanvas): Promise<Uint8Array> {
+async function canvasToImage(canvas: BrowserCanvas, mimeType = 'image/png'): Promise<Uint8Array> {
 	let blob: Blob;
 	if ('convertToBlob' in canvas && typeof canvas.convertToBlob === 'function') {
-		blob = await canvas.convertToBlob({ type: 'image/png' });
+		blob = await canvas.convertToBlob({ type: mimeType });
 	} else {
 		blob = await new Promise<Blob>((resolve, reject) => {
 			(canvas as HTMLCanvasElement).toBlob((value) => {
 				if (value) resolve(value);
-				else reject(new Error('publishBrowser: canvas PNG encoding failed.'));
-			}, 'image/png');
+				else reject(new Error(`publishBrowser: canvas ${mimeType} encoding failed.`));
+			}, mimeType);
 		});
 	}
 	return new Uint8Array(await blob.arrayBuffer());
@@ -178,6 +178,7 @@ async function decodeRaster(bytes: Uint8Array, mimeType: string): Promise<Browse
 
 class BrowserImagePipeline implements AtlasRasterPipeline {
 	private rawOutput = false;
+	private mimeType = 'image/png';
 
 	constructor(
 		private raster: Promise<BrowserRaster>,
@@ -224,6 +225,13 @@ class BrowserImagePipeline implements AtlasRasterPipeline {
 
 	png(): this {
 		this.rawOutput = false;
+		this.mimeType = 'image/png';
+		return this;
+	}
+
+	jpeg(): this {
+		this.rawOutput = false;
+		this.mimeType = 'image/jpeg';
 		return this;
 	}
 
@@ -276,12 +284,12 @@ class BrowserImagePipeline implements AtlasRasterPipeline {
 			return new Uint8Array(
 				getBrowserContext(raster.canvas).getImageData(0, 0, raster.width, raster.height).data,
 			);
-		return canvasToPng(raster.canvas);
+		return canvasToImage(raster.canvas, this.mimeType);
 	}
 
 	async toFile(path: string): Promise<void> {
 		const raster = await this.raster;
-		await this.write(path, await canvasToPng(raster.canvas));
+		await this.write(path, await canvasToImage(raster.canvas, this.mimeType));
 	}
 }
 

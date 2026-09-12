@@ -79,6 +79,12 @@ class MemoryOutputRasterPipeline implements AtlasRasterPipeline {
 		return this;
 	}
 
+	jpeg(): this {
+		if (!this.pipeline.jpeg) throw new Error('publishToMemory: raster backend cannot encode JPEG.');
+		this.pipeline = this.pipeline.jpeg();
+		return this;
+	}
+
 	rotate(angle: number): this {
 		this.pipeline = this.pipeline.rotate(angle);
 		return this;

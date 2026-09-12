@@ -69,6 +69,8 @@ export interface AtlasRasterPipeline {
 	raw(): AtlasRasterPipeline;
 	extract(options: { left: number; top: number; width: number; height: number }): AtlasRasterPipeline;
 	png(): AtlasRasterPipeline;
+	/** Optional JPEG output capability for standalone image atlases. */
+	jpeg?(): AtlasRasterPipeline;
 	rotate(angle: number): AtlasRasterPipeline;
 	composite(inputs: AtlasRasterCompositeInput[]): AtlasRasterPipeline;
 	metadata(): Promise<AtlasRasterMetadata>;
