@@ -1580,9 +1580,7 @@ function _writeChildSpecific(buf: WriteBuffer, child: EncoderChildLike, pkg: Pac
 			buf.writeInt16(child.getColumnGap?.() ?? 0); // columnGap
 			buf.writeInt16(child.getLineCount?.() ?? 0); // lineCount
 			buf.writeInt16(child.getColumnCount?.() ?? 0); // columnCount
-			const layout = child.getLayout?.() ?? 0;
-			const unboundedFlow = (layout === 2 && !child.getColumnCount?.()) || (layout === 3 && !child.getLineCount?.());
-			buf.writeBool(!unboundedFlow && (child.getAutoResizeItem?.() ?? true));
+			buf.writeBool(child.getAutoResizeItem?.() ?? true);
 			buf.writeUint8(child.getChildrenRenderOrder?.() ?? 0); // childrenRenderOrder
 			buf.writeInt16(child.getApexIndex?.() ?? 0); // apexIndex
 			// margin

@@ -1975,7 +1975,8 @@ export class ProjectWriter {
 			if (layout === 4 && lineCount !== 0) {
 				writeXmlAttr(attrs, PROJECT_XML_PROTOCOL.list.attrs.lineItemCount2, String(lineCount));
 			}
-			if (typedObj.getAutoResizeItem?.() === false) writeXmlAttr(attrs, PROJECT_XML_PROTOCOL.list.attrs.autoResizeItem, 'false');
+			const autoResizeItem = typedObj.getAutoResizeItem?.() ?? true;
+			if (!autoResizeItem || layout >= 2) writeXmlAttr(attrs, PROJECT_XML_PROTOCOL.list.attrs.autoResizeItem, String(autoResizeItem));
 			const autoClearItems = typedObj.getAutoClearItems?.();
 			if (autoClearItems != null) writeXmlAttr(attrs, PROJECT_XML_PROTOCOL.list.attrs.autoClearItems, String(autoClearItems));
 			const selectionMode = typedObj.getSelectionMode?.();

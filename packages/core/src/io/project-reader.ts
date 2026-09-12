@@ -2622,7 +2622,7 @@ export class ProjectReader {
 					}
 				}
 				const autoResizeItem = readXmlAttr<string | boolean>(attrs, PROJECT_XML_PROTOCOL.list.attrs.autoResizeItem);
-				if (autoResizeItem !== undefined) g.setAutoResizeItem?.(parseBool(autoResizeItem));
+				g.setAutoResizeItem(autoResizeItem === undefined ? g.getLayout() < 2 : parseBool(autoResizeItem));
 				const autoClearItems = readXmlAttr<string | boolean>(attrs, PROJECT_XML_PROTOCOL.list.attrs.autoClearItems);
 				if (autoClearItems !== undefined) g.setAutoClearItems(parseBool(autoClearItems));
 				const selectionMode = readXmlAttr<string>(attrs, PROJECT_XML_PROTOCOL.list.attrs.selectionMode);

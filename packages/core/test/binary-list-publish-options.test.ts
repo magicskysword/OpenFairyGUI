@@ -5,7 +5,7 @@ import path from 'node:path';
 import { NodeIO } from '../src/node.js';
 import type { GComponent, GList } from '../src/index.js';
 
-test('publish clears ComboBox design items and disables auto sizing for unbounded flow lists', async (t) => {
+test('publish clears ComboBox design items and preserves layout-specific item sizing defaults', async (t) => {
 	const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'fgui-list-options-'));
 	try {
 		const file = path.join(directory, 'UI.fairy');
@@ -22,6 +22,7 @@ test('publish clears ComboBox design items and disables auto sizing for unbounde
 			<component id="combo" name="combo"><ComboBox autoClearItems="true"><item title="Design" icon="ui://listpkg1icon"/></ComboBox></component>
 			<list id="flow" layout="flow_hz"/><list id="bounded" layout="flow_hz" lineItemCount="3"/>
 			<list id="vertical" layout="flow_vt"/><list id="row" layout="row"/>
+			<list id="explicit" layout="flow_hz" lineItemCount="3" autoItemSize="true"/>
 		</displayList></component>`,
 		);
 		const io = new NodeIO();
@@ -32,7 +33,7 @@ test('publish clears ComboBox design items and disables auto sizing for unbounde
 		t.deepEqual((children[0] as GComponent).getInstanceComboItems(), []);
 		t.deepEqual(
 			children.slice(1).map((child) => (child as GList).getAutoResizeItem()),
-			[false, true, false, true],
+			[false, false, false, true, true],
 		);
 		const original = doc.getRoot().listPackages()[0].listComponents()[0].listChildren()[0] as GComponent;
 		t.is(original.getInstanceComboItems().length, 1);
