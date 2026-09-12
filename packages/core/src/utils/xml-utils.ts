@@ -7,7 +7,7 @@ const defaultOptions = {
 	allowBooleanAttributes: true,
 	processEntities: true,
 	htmlEntities: true,
-	trimValues: true,
+	trimValues: false,
 	isArray: (tagName: string) => {
 		return ARRAY_TAGS.has(tagName);
 	},
