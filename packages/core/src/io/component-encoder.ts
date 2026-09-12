@@ -828,7 +828,7 @@ function _writeRelations(
 
 function _createChildIndexMap(comp: Component): Map<string, number> {
 	const childIndexById = new Map<string, number>();
-	const children = comp.listChildren();
+	const children = getRuntimeChildren(comp);
 	for (const [index, child] of children.entries()) {
 		const childId = child.getId?.();
 		if (childId) childIndexById.set(childId, index);
