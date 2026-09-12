@@ -606,12 +606,16 @@ export class BinaryWriter {
 				const oh = sp.originalHeight ?? 0;
 				const isPackageItemSprite = packageItemIds.has(sp.itemId);
 				const isZeroSizedDirectOutput = isPackageItemSprite && sp.w === 0 && sp.h === 0;
+				const trimmedSize = isPackageItemSprite && (
+					(ow > 0 && ow !== (sp.rotated ? sp.h : sp.w)) ||
+					(oh > 0 && oh !== (sp.rotated ? sp.w : sp.h))
+				);
 				// Align with the Unity CLI writer:
 				// - package item sprites keep their pre-rotation original size
 				// - trimmed sprites keep offset + original size
 				// - fully transparent direct-output package items keep a 0x0 rect with original size
 				// - generated movieclip frame sprites only emit this payload when they carry trim offsets
-				const hasOriginal = (isPackageItemSprite && sp.rotated) || ox !== 0 || oy !== 0 || isZeroSizedDirectOutput;
+				const hasOriginal = (isPackageItemSprite && sp.rotated) || ox !== 0 || oy !== 0 || isZeroSizedDirectOutput || trimmedSize;
 				data.writeBool(hasOriginal);
 				if (hasOriginal) {
 					data.writeInt32(ox);
