@@ -19,3 +19,9 @@ test('XML attribute values preserve significant leading and trailing whitespace'
 	const ordered = parseXMLPreserveOrder(xml);
 	t.is((ordered[0][':@'] as Record<string, string>).name, ' panel ');
 });
+
+test('XML formatting whitespace does not become semantic text nodes', (t) => {
+	const compact = '<component name=" panel "><displayList><text text=" title "/></displayList></component>';
+	const formatted = '<component name=" panel ">\n  <displayList>\n    <text text=" title "/>\n  </displayList>\n</component>';
+	t.deepEqual(parseXML(formatted), parseXML(compact));
+});

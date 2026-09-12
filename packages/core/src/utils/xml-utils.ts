@@ -8,6 +8,7 @@ const defaultOptions = {
 	processEntities: true,
 	htmlEntities: true,
 	trimValues: false,
+	tagValueProcessor: (_name: string, value: string) => value.trim() === '' ? '' : value,
 	isArray: (tagName: string) => {
 		return ARRAY_TAGS.has(tagName);
 	},
