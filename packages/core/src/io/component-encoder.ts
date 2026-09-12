@@ -166,6 +166,7 @@ type EncoderChildLike = ChildNode & {
 	getInstanceMax?(): number;
 	getInstanceMin?(): number;
 	getInstanceComboItems?(): ComboItemLike[];
+	getInstanceAutoClearItems?(): boolean;
 	getSelectionController?(): string;
 	getCustomData?(): string;
 	getTooltips?(): string;
@@ -1579,7 +1580,9 @@ function _writeChildSpecific(buf: WriteBuffer, child: EncoderChildLike, pkg: Pac
 			buf.writeInt16(child.getColumnGap?.() ?? 0); // columnGap
 			buf.writeInt16(child.getLineCount?.() ?? 0); // lineCount
 			buf.writeInt16(child.getColumnCount?.() ?? 0); // columnCount
-			buf.writeBool(child.getAutoResizeItem?.() ?? true); // autoResizeItem
+			const layout = child.getLayout?.() ?? 0;
+			const unboundedFlow = (layout === 2 && !child.getColumnCount?.()) || (layout === 3 && !child.getLineCount?.());
+			buf.writeBool(!unboundedFlow && (child.getAutoResizeItem?.() ?? true));
 			buf.writeUint8(child.getChildrenRenderOrder?.() ?? 0); // childrenRenderOrder
 			buf.writeInt16(child.getApexIndex?.() ?? 0); // apexIndex
 			// margin
@@ -1842,7 +1845,7 @@ function _writeExtensionInstanceData(
 			break;
 		}
 		case 'ComboBox': {
-			const comboItems: ComboItemLike[] = child.getInstanceComboItems?.() ?? [];
+			const comboItems: ComboItemLike[] = child.getInstanceAutoClearItems?.() ? [] : child.getInstanceComboItems?.() ?? [];
 			buf.writeInt16(comboItems.length);
 			for (const item of comboItems) {
 				const itemStart = buf.pos;

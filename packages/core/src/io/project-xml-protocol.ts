@@ -402,6 +402,7 @@ const LABEL_EXTENSION_ATTRS = {
 } satisfies XmlAttrMap;
 
 const COMBOBOX_EXTENSION_ATTRS = {
+	autoClearItems: { canonical: 'autoClearItems' },
 	dropdown: { canonical: 'dropdown' },
 	title: { canonical: 'title' },
 	icon: { canonical: 'icon' },

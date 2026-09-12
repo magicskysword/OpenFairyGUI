@@ -624,6 +624,7 @@ type WritableChild = GObject & {
 	getColumnCount?(): number;
 	getAutoResizeItem?(): boolean;
 	getAutoClearItems?(): boolean | null;
+	getInstanceAutoClearItems?(): boolean;
 	getPropertyOverrides?(): ObjectPropertyOverride[];
 	getOverflow?(): number;
 	getScrollType?(): number;
@@ -2112,6 +2113,7 @@ export class ProjectWriter {
 				if (instanceValue !== 0 && extSpecs.value) writeXmlAttr(extAttrs, extSpecs.value, String(instanceValue));
 				if (instanceMax !== 0 && extSpecs.max) writeXmlAttr(extAttrs, extSpecs.max, String(instanceMax));
 				if (instanceMin !== 0 && extSpecs.min) writeXmlAttr(extAttrs, extSpecs.min, String(instanceMin));
+				if (typedObj.getInstanceAutoClearItems?.()) writeXmlAttr(extAttrs, PROJECT_XML_PROTOCOL.comboBoxExtension.attrs.autoClearItems, 'true');
 				const comboItems = typedObj.getInstanceComboItems?.() ?? [];
 				const comboBoxItemChildName = getProtocolChildName(PROJECT_XML_PROTOCOL.comboBoxExtension, 'item');
 				if (comboItems.length > 0 && comboBoxItemChildName) {

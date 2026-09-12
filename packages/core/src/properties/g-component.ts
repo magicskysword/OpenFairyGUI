@@ -60,6 +60,7 @@ export interface IGComponent extends IGObject {
 	instancePromptText: string;
 	instanceSelectionController: string;
 	instanceVisibleItemCount: number;
+	instanceAutoClearItems: boolean;
 	instanceValue: number;
 	instanceMax: number;
 	instanceMin: number;
@@ -151,6 +152,7 @@ export class GComponent<
 			instanceMax: 0,
 			instanceMin: 0,
 			instanceComboItems: [] as IGComponent['instanceComboItems'],
+			instanceAutoClearItems: false,
 		}) as Nullable<TProps>;
 	}
 
@@ -323,6 +325,8 @@ export class GComponent<
 	public getInstanceComboItems(): IGComponent['instanceComboItems'] {
 		return this.get('instanceComboItems' as never) as IGComponent['instanceComboItems'];
 	}
+	public getInstanceAutoClearItems(): boolean { return this.getComponentProp('instanceAutoClearItems'); }
+	public setInstanceAutoClearItems(v: boolean): this { return this.setComponentProp('instanceAutoClearItems', v); }
 	public setInstanceComboItems(v: IGComponent['instanceComboItems']): this {
 		return this.set('instanceComboItems' as never, v as never);
 	}

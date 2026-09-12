@@ -2761,6 +2761,10 @@ export class ProjectReader {
 				const min = extSpecs.min ? readXmlAttr<string | number>(extAttrs, extSpecs.min) : undefined;
 				if (min !== undefined) componentObj.setInstanceMin?.(parseInt2(min));
 				const comboBoxItemChildName = getProtocolChildName(PROJECT_XML_PROTOCOL.comboBoxExtension, 'item');
+				if (extTypeName === 'ComboBox') {
+					const clear = readXmlAttr<string | boolean>(extAttrs, PROJECT_XML_PROTOCOL.comboBoxExtension.attrs.autoClearItems);
+					if (clear !== undefined) componentObj.setInstanceAutoClearItems(parseBool(clear));
+				}
 				if (extTypeName === 'ComboBox' && comboBoxItemChildName && extAttrs[comboBoxItemChildName]) {
 					const comboItems = ensureArray(extAttrs[comboBoxItemChildName]);
 					componentObj.setInstanceComboItems?.(
