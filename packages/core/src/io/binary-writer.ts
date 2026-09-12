@@ -387,7 +387,7 @@ export class BinaryWriter {
 						data.writeInt32(grid[1]);
 						data.writeInt32(grid[2]);
 						data.writeInt32(grid[3]);
-						data.writeInt32(0); // tileGridIndice
+						data.writeInt32(res.getTileGridIndice());
 					}
 					data.writeBool(res.getSmoothing());
 					break;

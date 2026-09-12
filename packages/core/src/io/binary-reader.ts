@@ -364,7 +364,7 @@ export class BinaryReader {
 					if (scaleOpt === 1) {
 						const x = buf.getInt32(), y = buf.getInt32();
 						const w = buf.getInt32(), h = buf.getInt32();
-						buf.getInt32(); // tileGridIndice
+						res.setTileGridIndice(buf.getInt32());
 						res.setScaleOption(1).setScale9Grid([x, y, w, h]);
 					} else if (scaleOpt === 2) {
 						res.setScaleOption(2);
