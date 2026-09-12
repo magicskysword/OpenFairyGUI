@@ -3,6 +3,7 @@ import type { Document } from '../document.js';
 import type { Package } from '../properties/package.js';
 import type { Component } from '../properties/component.js';
 import type { GObject } from '../properties/g-object.js';
+import type { ObjectPropertyOverride } from '../properties/g-component.js';
 import type { Controller } from '../properties/controller.js';
 import type { Transition } from '../properties/transition.js';
 import type { Gear } from '../properties/gear.js';
@@ -623,6 +624,7 @@ type WritableChild = GObject & {
 	getColumnCount?(): number;
 	getAutoResizeItem?(): boolean;
 	getAutoClearItems?(): boolean | null;
+	getPropertyOverrides?(): ObjectPropertyOverride[];
 	getOverflow?(): number;
 	getScrollType?(): number;
 	getScrollBarFlags?(): number;
@@ -633,6 +635,7 @@ type WritableChild = GObject & {
 	getMargin?(): { top?: number; bottom?: number; left?: number; right?: number };
 	getClipSoftness?(): { x?: number; y?: number };
 	getListItems?(): Array<{
+		properties?: ObjectPropertyOverride[];
 		title?: string | null;
 		icon?: string | null;
 		url?: string | null;
@@ -752,6 +755,7 @@ function formatTitleType(titleType: number): string {
 }
 
 function serializeListItemXmlNode(item: {
+	properties?: ObjectPropertyOverride[];
 	title?: string | null;
 	icon?: string | null;
 	url?: string | null;
@@ -776,7 +780,20 @@ function serializeListItemXmlNode(item: {
 		writeXmlAttr(attrs, specs.level, String(item.level));
 	}
 	if (item.controllers !== undefined && item.controllers !== null) writeXmlAttr(attrs, specs.controllers, item.controllers);
+	writePropertyOverrides(attrs, item.properties ?? []);
 	return attrs;
+}
+
+function writePropertyOverrides(attrs: Record<string, unknown>, properties: ObjectPropertyOverride[]): void {
+	if (properties.length === 0) return;
+	const specs = PROJECT_XML_PROTOCOL.propertyOverride.attrs;
+	attrs.property = properties.map(property => {
+		const entry: Record<string, unknown> = {};
+		writeXmlAttr(entry, specs.target, property.target);
+		writeXmlAttr(entry, specs.propertyId, String(property.propertyId));
+		writeXmlAttr(entry, specs.value, property.value);
+		return entry;
+	});
 }
 
 function serializeComboBoxItemXmlNode(item: {
@@ -1551,6 +1568,7 @@ export class ProjectWriter {
 		if (obj.getName()) writeXmlAttr(attrs, PROJECT_XML_PROTOCOL.displayObject.attrs.name, obj.getName());
 
 		// Type-specific attributes
+		writePropertyOverrides(attrs, typedObj.getPropertyOverrides?.() ?? []);
 		const type = obj.propertyType as string;
 		if (type === 'GImage' || type === 'GMovieClip' || type === 'GComponent'
 			|| EXTENSION_TYPE[type]) {

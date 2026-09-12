@@ -2,6 +2,7 @@ import { Document } from '../document.js';
 import { ControllerActionType, GearType, type RelationDef } from '../constants.js';
 import type { Component } from '../properties/component.js';
 import type { GObject } from '../properties/g-object.js';
+import type { ObjectPropertyOverride } from '../properties/g-component.js';
 import type { Controller } from '../properties/controller.js';
 import type { Package } from '../properties/package.js';
 import type { ProjectSettings } from '../types/settings.js';
@@ -792,6 +793,17 @@ function inferTreeItemFolderFlags(items: Array<{
 	});
 }
 
+function parsePropertyOverrides(node: XmlNode): ObjectPropertyOverride[] {
+	const specs = PROJECT_XML_PROTOCOL.propertyOverride.attrs;
+	return ensureArray(node.property).map(value => getXmlNode<XmlNode>(value))
+		.filter((value): value is XmlNode => value !== null)
+		.map(value => ({
+			target: readXmlAttr<string>(value, specs.target) ?? '',
+			propertyId: parseInt2(readXmlAttr<string | number>(value, specs.propertyId)),
+			value: String(readXmlAttr<string>(value, specs.value) ?? ''),
+		}));
+}
+
 function parseListItemXmlNode(item: ListItemXmlNode): {
 	title: string | null;
 	icon: string | null;
@@ -802,10 +814,12 @@ function parseListItemXmlNode(item: ListItemXmlNode): {
 	level: number;
 	isFolder: boolean | null;
 	controllers?: string | null;
+	properties?: ObjectPropertyOverride[];
 } {
 	const specs = PROJECT_XML_PROTOCOL.listItem.attrs;
 	const isFolder = readXmlAttr<string | boolean>(item, specs.isFolder);
 	const controllers = readXmlAttr<string>(item, specs.controllers);
+	const properties = parsePropertyOverrides(item);
 	return {
 		title: readXmlAttr<string>(item, specs.title) ?? null,
 		icon: readXmlAttr<string>(item, specs.icon) ?? null,
@@ -816,6 +830,7 @@ function parseListItemXmlNode(item: ListItemXmlNode): {
 		level: parseInt2(readXmlAttr<string | number>(item, specs.level)),
 		isFolder: isFolder !== undefined ? parseBool(isFolder) : null,
 		...(controllers !== undefined ? { controllers } : {}),
+		...(properties.length > 0 ? { properties } : {}),
 	};
 }
 
@@ -2666,6 +2681,9 @@ export class ProjectReader {
 		const objectId = readXmlAttr<string>(attrs, PROJECT_XML_PROTOCOL.displayObject.attrs.id);
 		obj.setId(objectId || '');
 		const objectProtocol = DISPLAY_OBJECT_PROTOCOL_MAP[tagName];
+		if ('setPropertyOverrides' in obj && typeof obj.setPropertyOverrides === 'function') {
+			obj.setPropertyOverrides(parsePropertyOverrides(attrs));
+		}
 		readCommonDisplayState(attrs, obj as WritableCommonDisplayState, objectProtocol);
 		// Parse gear elements
 		for (const gearTag of getProtocolGearChildNames(objectProtocol)) {

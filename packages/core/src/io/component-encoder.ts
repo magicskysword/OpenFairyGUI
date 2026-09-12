@@ -17,6 +17,7 @@ import type { Document } from '../document.js';
 import { ControllerActionType, ObjectType, type RelationDef } from '../constants.js';
 import type { Component } from '../properties/component.js';
 import type { Package } from '../properties/package.js';
+import type { ObjectPropertyOverride } from '../properties/g-component.js';
 import { WriteBuffer } from './write-buffer.js';
 
 const BLOCK_COUNT = 8;
@@ -99,6 +100,7 @@ type EncoderChildLike = ChildNode & {
 	getColumnCount?(): number;
 	getAutoResizeItem?(): boolean;
 	getAutoClearItems?(): boolean | null;
+	getPropertyOverrides?(): ObjectPropertyOverride[];
 	getAutoClearText?(): boolean;
 	getClearOnPublish?(): boolean;
 	getChildrenRenderOrder?(): number;
@@ -209,6 +211,7 @@ interface ComboItemLike {
 }
 
 interface ListItemLike {
+	properties?: ObjectPropertyOverride[];
 	url?: string | null;
 	title?: string | null;
 	selectedTitle?: string | null;
@@ -1954,7 +1957,7 @@ function _writeListItems(buf: WriteBuffer, child: EncoderChildLike, pkg: Package
 		buf.writeInt16(controllerCount);
 		buf.pos = controllerEnd;
 		if (version >= 2) {
-			buf.writeInt16(0); // no property overrides
+			writePropertyOverrides(buf, item.properties ?? [], pkg);
 		}
 
 		const itemEnd = buf.pos;
@@ -1972,7 +1975,7 @@ function _writeTreeSettings(buf: WriteBuffer, child: EncoderChildLike): void {
 
 // ─── Block 4: Component/List child controller overrides ──────────────────
 
-function _writeChildBlock4Component(buf: WriteBuffer, child: EncoderChildLike, comp: Component, _pkg: Package): void {
+function _writeChildBlock4Component(buf: WriteBuffer, child: EncoderChildLike, comp: Component, pkg: Package): void {
 	// 1. pageController index
 	const pageCtrlName = child.getPageController?.() ?? null;
 	if (pageCtrlName) {
@@ -2006,8 +2009,16 @@ function _writeChildBlock4Component(buf: WriteBuffer, child: EncoderChildLike, c
 		buf.writeInt16(0);
 	}
 
-	// 3. Property overrides (§_-55§)
-	buf.writeInt16(0); // no property overrides in current project data
+	writePropertyOverrides(buf, child.getPropertyOverrides?.() ?? [], pkg);
+}
+
+function writePropertyOverrides(buf: WriteBuffer, properties: ObjectPropertyOverride[], pkg: Package): void {
+	buf.writeInt16(properties.length);
+	for (const property of properties) {
+		buf.writeS(property.target);
+		buf.writeInt16(property.propertyId);
+		buf.writeSEx(property.propertyId === 1 ? remapLocalUiUrl(pkg, property.value) : property.value);
+	}
 }
 
 function _writeChildBlock4TextInput(buf: WriteBuffer, child: EncoderChildLike): void {

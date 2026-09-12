@@ -7,6 +7,7 @@
  */
 
 import type { Document } from '../document.js';
+import type { ObjectPropertyOverride } from '../properties/g-component.js';
 import { ControllerActionType, GearType, TransitionActionType, type RelationDef } from '../constants.js';
 import { ByteBuffer } from './byte-buffer.js';
 
@@ -221,6 +222,9 @@ function decodeChildBlock4ComponentLike(
 	if ('setControllerOverrides' in child && typeof child.setControllerOverrides === 'function') {
 		(child as { setControllerOverrides(v: string): void }).setControllerOverrides(overrides.join(','));
 	}
+	if (childBuf.version >= 2 && 'setPropertyOverrides' in child && typeof child.setPropertyOverrides === 'function') {
+		child.setPropertyOverrides(readPropertyOverrides(childBuf));
+	}
 	if (pageControllerIndex >= 0) {
 		const controller = resource.listControllers()[pageControllerIndex];
 		if (controller && 'setPageController' in child && typeof child.setPageController === 'function') {
@@ -307,22 +311,28 @@ function decodeListScrollPane(child: ComponentDisplayObject, childBuf: ByteBuffe
 		.setFooterRes(childBuf.readS() ?? '');
 }
 
-function decodeListItemOverrides(buf: ByteBuffer, version: number): string | null {
-	if (remainingBytes(buf) < 2) return null;
+function readPropertyOverrides(buf: ByteBuffer): ObjectPropertyOverride[] {
+	if (remainingBytes(buf) < 2) return [];
+	const count = buf.getInt16();
+	const properties: ObjectPropertyOverride[] = [];
+	for (let index = 0; index < count && remainingBytes(buf) >= 6; index += 1) {
+		properties.push({ target: buf.readS() ?? '', propertyId: buf.getInt16(), value: buf.readS() ?? '' });
+	}
+	return properties;
+}
+
+function decodeListItemOverrides(buf: ByteBuffer, version: number): { controllers?: string; properties?: ObjectPropertyOverride[] } {
+	if (remainingBytes(buf) < 2) return {};
 	const controllerOverrideCount = buf.getInt16();
 	const controllerParts: string[] = [];
 	for (let index = 0; index < controllerOverrideCount && remainingBytes(buf) >= 4; index += 1) {
 		controllerParts.push(buf.readS() ?? '', buf.readS() ?? '');
 	}
-	if (version >= 2 && remainingBytes(buf) >= 2) {
-		const propertyOverrideCount = buf.getInt16();
-		for (let index = 0; index < propertyOverrideCount && remainingBytes(buf) >= 6; index += 1) {
-			buf.readS();
-			buf.getInt16();
-			buf.readS();
-		}
-	}
-	return controllerParts.length > 0 ? controllerParts.join(',') : null;
+	const properties = version >= 2 ? readPropertyOverrides(buf) : [];
+	return {
+		...(controllerParts.length ? { controllers: controllerParts.join(',') } : {}),
+		...(properties.length ? { properties } : {}),
+	};
 }
 
 function decodeListItems(child: ComponentDisplayObject, childBuf: ByteBuffer): void {
@@ -362,8 +372,7 @@ function decodeListItems(child: ComponentDisplayObject, childBuf: ByteBuffer): v
 			level,
 			isFolder,
 		};
-		const controllers = decodeListItemOverrides(childBuf, childBuf.version);
-		items.push(controllers === null ? item : { ...item, controllers });
+		items.push({ ...item, ...decodeListItemOverrides(childBuf, childBuf.version) });
 		childBuf.pos = nextPos;
 	}
 	listLike.setListItems(items);

@@ -461,6 +461,7 @@ test('project XML protocol children maps stay explicit and stable', (t) => {
 			'packageResource',
 			'packageSkeletonResource',
 			'progressBarExtension',
+			'propertyOverride',
 			'relation',
 			'richText',
 			'scrollBarExtension',
@@ -500,6 +501,7 @@ test('project XML protocol children maps stay explicit and stable', (t) => {
 		'gearSize',
 		'gearText',
 		'gearXY',
+		'property',
 		'relation',
 	]);
 	t.deepEqual(collectChildNames('image'), [
@@ -614,8 +616,10 @@ test('project XML protocol children maps stay explicit and stable', (t) => {
 		'gearText',
 		'gearXY',
 		'item',
+		'property',
 		'relation',
 	]);
+	t.deepEqual(collectChildNames('listItem'), ['property']);
 	t.deepEqual(collectChildNames('controller'), ['action']);
 	t.deepEqual(collectChildNames('transition'), ['item']);
 	t.deepEqual(collectChildNames('comboBoxExtension'), ['item']);

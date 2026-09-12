@@ -1,6 +1,12 @@
 import { type Nullable, PropertyType, OverflowType, ScrollType, ScrollBarDisplayType } from '../constants.js';
 import { GObject, type IGObject } from './g-object.js';
 
+export interface ObjectPropertyOverride {
+	target: string;
+	propertyId: number;
+	value: string;
+}
+
 export interface IGComponent extends IGObject {
 	src: string;
 	x: number;
@@ -38,6 +44,7 @@ export interface IGComponent extends IGObject {
 	clipSoftness: [number, number];
 	pageController: string;
 	controllerOverrides: string;
+	propertyOverrides: ObjectPropertyOverride[];
 	instanceExtType: string;
 	instanceTitle: string;
 	instanceSelectedTitle: string;
@@ -124,6 +131,7 @@ export class GComponent<
 			clipSoftness: [0, 0] as [number, number],
 			pageController: '',
 			controllerOverrides: '',
+			propertyOverrides: [],
 			instanceExtType: '',
 			instanceTitle: '',
 			instanceSelectedTitle: '',
@@ -254,6 +262,9 @@ export class GComponent<
 
 	public getControllerOverrides(): string { return firstString(this.getComponentProp('controllerOverrides')); }
 	public setControllerOverrides(v: string): this { return this.setComponentProp('controllerOverrides', v); }
+
+	public getPropertyOverrides(): ObjectPropertyOverride[] { return this.getComponentProp('propertyOverrides').map(value => ({ ...value })); }
+	public setPropertyOverrides(v: ObjectPropertyOverride[]): this { return this.setComponentProp('propertyOverrides', v.map(value => ({ ...value }))); }
 
 	public getInstanceExtType(): string { return firstString(this.getComponentProp('instanceExtType')); }
 	public setInstanceExtType(v: string): this { return this.setComponentProp('instanceExtType', v); }

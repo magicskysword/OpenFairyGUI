@@ -1,5 +1,6 @@
 import { type Nullable, PropertyType, ListLayoutType, ListSelectionMode } from '../constants.js';
 import { GObject, type IGObject } from './g-object.js';
+import type { ObjectPropertyOverride } from './g-component.js';
 
 export interface GListItemData {
 	title: string | null;
@@ -11,6 +12,7 @@ export interface GListItemData {
 	level: number;
 	isFolder: boolean | null;
 	controllers?: string | null;
+	properties?: ObjectPropertyOverride[];
 }
 
 interface XYLike {
@@ -68,6 +70,7 @@ export interface IListBase extends IGObject {
 	listItems: GListItemData[];
 	pageController: string;
 	controllerOverrides: string;
+	propertyOverrides: ObjectPropertyOverride[];
 	selectionController: string;
 }
 
@@ -129,6 +132,7 @@ export class GListBase<
 			listItems: [] as GListItemData[],
 			pageController: '',
 			controllerOverrides: '',
+			propertyOverrides: [],
 			selectionController: '',
 		}) as Nullable<TProps>;
 	}
@@ -271,6 +275,9 @@ export class GListBase<
 
 	public getControllerOverrides(): string { return firstString(this.getListProp('controllerOverrides')); }
 	public setControllerOverrides(v: string): this { return this.setListProp('controllerOverrides', v); }
+
+	public getPropertyOverrides(): ObjectPropertyOverride[] { return this.getListProp('propertyOverrides').map(value => ({ ...value })); }
+	public setPropertyOverrides(v: ObjectPropertyOverride[]): this { return this.setListProp('propertyOverrides', v.map(value => ({ ...value }))); }
 
 	public getMargin(): EdgeInsetsLike {
 		const margin = this.getListProp('margin');

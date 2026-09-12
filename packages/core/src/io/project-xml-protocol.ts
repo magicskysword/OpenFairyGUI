@@ -535,7 +535,13 @@ const RELATION_NODE = defineNode(RELATION_ATTRS);
 const GEAR_NODE = defineNode(GEAR_ATTRS);
 const CONTROLLER_ACTION_NODE = defineNode(CONTROLLER_ACTION_ATTRS);
 const TRANSITION_ITEM_NODE = defineNode(TRANSITION_ITEM_ATTRS);
-const LIST_ITEM_NODE = defineNode(LIST_ITEM_ATTRS);
+const PROPERTY_OVERRIDE_NODE = defineNode({
+	target: { canonical: 'target' },
+	propertyId: { canonical: 'propertyId' },
+	value: { canonical: 'value' },
+});
+const WITH_PROPERTY_CHILDREN = { property: PROPERTY_OVERRIDE_NODE } satisfies XmlChildrenMap;
+const LIST_ITEM_NODE = defineNode(LIST_ITEM_ATTRS, WITH_PROPERTY_CHILDREN);
 const COMBOBOX_ITEM_NODE = defineNode(COMBOBOX_ITEM_ATTRS);
 
 const WITH_RELATION_CHILDREN = {
@@ -677,6 +683,7 @@ const COMPONENT_INSTANCE_NODE = defineNode(
 		WITH_RELATION_CHILDREN,
 		WITH_GEAR_CHILDREN,
 		WITH_INSTANCE_EXTENSION_CHILDREN,
+		WITH_PROPERTY_CHILDREN,
 	),
 );
 
@@ -771,6 +778,7 @@ const LIST_NODE = defineNode(
 		WITH_RELATION_CHILDREN,
 		WITH_GEAR_CHILDREN,
 		WITH_LIST_ITEM_CHILDREN,
+		WITH_PROPERTY_CHILDREN,
 	),
 );
 
@@ -844,6 +852,7 @@ export const PROJECT_XML_PROTOCOL = {
 	group: GROUP_NODE,
 	list: LIST_NODE,
 	listItem: LIST_ITEM_NODE,
+	propertyOverride: PROPERTY_OVERRIDE_NODE,
 	comboBoxItem: COMBOBOX_ITEM_NODE,
 } satisfies Record<string, XmlNodeProtocol>;
 
