@@ -1031,6 +1031,7 @@ function getItemHighResolutionItemIds(
 }
 
 function getAtlasId(atlas: Atlas): string {
+	if (atlas.getName().startsWith('atlas_')) return atlas.getName();
 	return `atlas${atlas.getIndex()}`;
 }
 
