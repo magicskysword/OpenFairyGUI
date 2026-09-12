@@ -1,5 +1,6 @@
 import {
 	BinaryWriter,
+	buildResourceReferenceIndex,
 	type BinaryWriterOptions,
 	type Component,
 	type Document,
@@ -224,6 +225,10 @@ interface TransitionWithPublishRefs {
 }
 
 interface ChildWithPublishRefs extends HasOptionalFont {
+	getClearOnPublish?(): boolean;
+	getAutoClearText?(): boolean;
+	getAutoClearItems?(): boolean | null;
+	getInstanceAutoClearItems?(): boolean;
 	getPropertyOverrides?(): Array<{ propertyId: number; value: string }>;
 	getId?(): string;
 	getPackageId?(): string;
@@ -669,13 +674,17 @@ function collectPackagePublishContext(
 		includeBranches: boolean;
 		activeBranch: string;
 		includeHighResolution: number;
+		entryResourceIds?: ReadonlySet<string>;
+		clearListItems?: boolean;
 	},
 ): PackagePublishContext {
 	const pkgId = pkg.getId();
 	const resources = pkg.listResources();
 	const resourceMap = new Map(resources.map((resource) => [resource.getId(), resource]));
-	const referencedIds = new Set<string>();
+	const referencedIds = new Set<string>(options.entryResourceIds);
 	const pixelHitTestImageIds = new Set<string>();
+	const componentReferences = new Map<string, Set<string>>();
+	const componentHitTests = new Map<string, Set<string>>();
 	const spriteItemIds = new Set<string>();
 	const collectExportedResourceIds = (
 		sourceResources: ReturnType<Package['listResources']>,
@@ -712,6 +721,8 @@ function collectPackagePublishContext(
 
 	for (const resource of resources) {
 		if (!isComponentResource(resource)) continue;
+		const referencedIds = new Set<string>();
+		const pixelHitTestImageIds = new Set<string>();
 		const component = resource as ComponentWithPublishRefs;
 		const children = component.listChildren();
 		const childMap = new Map(children.map((child) => [child.getId?.() ?? '', child]));
@@ -733,11 +744,11 @@ function collectPackagePublishContext(
 				if (property.propertyId === 1) addLocalUiResourceRef(referencedIds, pkgId, property.value);
 			}
 			const src = child.getSrc?.();
-			if (src) referencedIds.add(src);
+			if (src && (!child.getPackageId?.() || child.getPackageId?.() === pkgId)) referencedIds.add(src);
 			addLocalFontRef(referencedIds, pkgId, child.getFont?.());
-			addLocalUiResourceRefsFromText(referencedIds, pkgId, child.getText?.());
+			if (!child.getAutoClearText?.()) addLocalUiResourceRefsFromText(referencedIds, pkgId, child.getText?.());
 			for (const ref of [
-				child.getUrl?.(),
+				child.getClearOnPublish?.() ? undefined : child.getUrl?.(),
 				child.getDefaultItem?.(),
 				child.getIcon?.(),
 				child.getSelectedIcon?.(),
@@ -753,10 +764,12 @@ function collectPackagePublishContext(
 			]) {
 				addLocalUiResourceRef(referencedIds, pkgId, ref);
 			}
-			for (const item of child.getInstanceComboItems?.() ?? []) {
+			for (const item of child.getInstanceAutoClearItems?.() ? [] : (child.getInstanceComboItems?.() ?? [])) {
 				addLocalUiResourceRef(referencedIds, pkgId, item.icon ?? undefined);
 			}
-			for (const item of child.getListItems?.() ?? []) {
+			for (const item of (child.getAutoClearItems?.() ?? options.clearListItems)
+				? []
+				: (child.getListItems?.() ?? [])) {
 				for (const property of item.properties ?? []) {
 					if (property.propertyId === 1) addLocalUiResourceRef(referencedIds, pkgId, property.value);
 				}
@@ -785,6 +798,25 @@ function collectPackagePublishContext(
 				addLocalUiResourceRefsFromUnknown(referencedIds, pkgId, item.getStartValue?.());
 				addLocalUiResourceRefsFromUnknown(referencedIds, pkgId, item.getEndValue?.());
 			}
+		}
+		componentReferences.set(resource.getId(), referencedIds);
+		componentHitTests.set(resource.getId(), pixelHitTestImageIds);
+	}
+
+	const pending = resources
+		.filter(
+			(resource) =>
+				resource.getExported() || spriteItemIds.has(resource.getId()) || referencedIds.has(resource.getId()),
+		)
+		.map((resource) => resource.getId());
+	const visited = new Set<string>();
+	for (const id of pending) {
+		if (visited.has(id)) continue;
+		visited.add(id);
+		referencedIds.add(id);
+		for (const hit of componentHitTests.get(id) ?? []) pixelHitTestImageIds.add(hit);
+		for (const ref of componentReferences.get(id) ?? []) {
+			if (!visited.has(ref)) pending.push(ref);
 		}
 	}
 
@@ -995,6 +1027,8 @@ async function annotatePackagePublishArtifacts(
 		activeBranch: string;
 		includeHighResolution: number;
 		readFileRaw?: PublishFileSystem['readFileRaw'];
+		entryResourceIds?: ReadonlySet<string>;
+		clearListItems?: boolean;
 	},
 ): Promise<void> {
 	const selected = collectPackagePublishContext(pkg, options).publishedResourceIds;
@@ -1359,6 +1393,13 @@ export function publish(options: PublishOptions): Transform {
 			pkgMap.set(p.getId(), p);
 		}
 
+		const incoming = new Map<string, Set<string>>();
+		for (const ref of buildResourceReferenceIndex(doc).list()) {
+			if (ref.source.packageId === ref.target.packageId) continue;
+			const ids = incoming.get(ref.target.packageId) ?? new Set<string>();
+			ids.add(ref.target.resourceId);
+			incoming.set(ref.target.packageId, ids);
+		}
 		for (const pkg of allPackages) {
 			// Compute dependency list and selected publish artifacts before atlas packing,
 			// so merged-branch publishes can pack the overridden resources with main IDs.
@@ -1369,6 +1410,8 @@ export function publish(options: PublishOptions): Transform {
 				activeBranch: resolved.activeBranch,
 				includeHighResolution: resolved.includeHighResolution,
 				readFileRaw: options.atlas?.readFileRaw ?? options.fs?.readFileRaw,
+				entryResourceIds: incoming.get(pkg.getId()),
+				clearListItems: doc.getRoot().getSettings().common?.listClearOnPublish === true,
 			});
 		}
 
