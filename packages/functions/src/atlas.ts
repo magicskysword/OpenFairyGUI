@@ -1024,6 +1024,24 @@ async function writeAtlasPageImage(
 				imageBuffer = await encoder(filePath).png().toBuffer();
 			}
 			if (packedRect.rotated) imageBuffer = await encoder(imageBuffer).rotate(270).png().toBuffer();
+			if (isImageResource(input.resource) && input.resource.getDuplicatePadding()) {
+				const width = packedRect.rotated ? input.height : input.width;
+				const height = packedRect.rotated ? input.width : input.height;
+				const gutter = Math.floor((options.padding ?? 0) / 2);
+				for (const dy of [-1, 0, 1]) for (const dx of [-1, 0, 1]) {
+					if (dx === 0 && dy === 0) continue;
+					const strip = await encoder(imageBuffer).extract({
+						left: dx > 0 ? width - 1 : 0, top: dy > 0 ? height - 1 : 0,
+						width: dx === 0 ? width : 1, height: dy === 0 ? height : 1,
+					}).png().toBuffer();
+					for (let y = 1; y <= (dy === 0 ? 1 : gutter); y++) for (let x = 1; x <= (dx === 0 ? 1 : gutter); x++) {
+						const left = packedRect.x + (dx < 0 ? -x : dx > 0 ? width - 1 + x : 0);
+						const top = packedRect.y + (dy < 0 ? -y : dy > 0 ? height - 1 + y : 0);
+						if (left < 0 || top < 0 || left + (dx === 0 ? width : 1) > page.width || top + (dy === 0 ? height : 1) > page.height) continue;
+						compositeInputs.push({ input: strip, left, top });
+					}
+				}
+			}
 			compositeInputs.push({
 				input: imageBuffer,
 				left: packedRect.x,
