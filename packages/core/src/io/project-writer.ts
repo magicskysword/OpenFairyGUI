@@ -449,6 +449,7 @@ type WritableImageResource = WritableResource & {
 	getTileGridIndice?(): number;
 	getSmoothing?(): boolean;
 	getDuplicatePadding?(): boolean;
+	getDisableTrim?(): boolean;
 	getExtras?(): Record<string, unknown>;
 };
 
@@ -1298,7 +1299,7 @@ export class ProjectWriter {
 				const qualityOption = imgRes.getQualityOption?.() ?? '';
 				if (qualityOption) writeXmlAttr(attrs, PROJECT_XML_PROTOCOL.packageImageResource.attrs.qualityOption, qualityOption);
 				if (imgRes.getDuplicatePadding?.()) writeXmlAttr(attrs, PROJECT_XML_PROTOCOL.packageImageResource.attrs.duplicatePadding, 'true');
-				if (imgRes.getDisableTrim()) writeXmlAttr(attrs, PROJECT_XML_PROTOCOL.packageImageResource.attrs.disableTrim, 'true');
+				if (imgRes.getDisableTrim?.()) writeXmlAttr(attrs, PROJECT_XML_PROTOCOL.packageImageResource.attrs.disableTrim, 'true');
 				if (imgRes.getSmoothing?.() === false) writeXmlAttr(attrs, PROJECT_XML_PROTOCOL.packageImageResource.attrs.smoothing, 'false');
 			}
 
