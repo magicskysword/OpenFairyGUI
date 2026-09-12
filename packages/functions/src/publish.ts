@@ -1309,6 +1309,7 @@ export function publish(options: PublishOptions): Transform {
 					basePath: options.basePath,
 					outputPath: options.fs ? plan.outputDir : undefined,
 					mkdir: options.fs ? options.fs.mkdir : undefined,
+					writeFileRaw: options.atlas?.writeFileRaw ?? options.fs?.writeFileRaw,
 					readFileRaw: options.atlas?.readFileRaw ?? options.fs?.readFileRaw,
 					strictOutput: options.fs !== undefined,
 					packages: [plan.pkg.getName()],

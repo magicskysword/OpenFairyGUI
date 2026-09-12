@@ -176,6 +176,10 @@ export async function publishToMemory(
 
 	await publish({
 		...options,
+		atlas: {
+			...options.atlas,
+			writeFileRaw: async (filePath, data) => { addArtifact(filePath, data, 'atlas'); },
+		},
 		encoder,
 		output: MEMORY_OUTPUT_ROOT,
 		fs,

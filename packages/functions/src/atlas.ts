@@ -14,7 +14,7 @@ import {
 } from '@magicskysword/openfairygui-core';
 import { COMPAT_NODE_RECT_FLAGS, type CompatNodeRect } from './max-rects-compat.js';
 import { MaxRectsPackerCompat } from './max-rects-packer-compat.js';
-import type { AtlasRasterBackend, AtlasRasterInput, AtlasRasterResolvedBuffer } from './publish/contracts.js';
+import type { AtlasRasterBackend, AtlasRasterInput, AtlasRasterResolvedBuffer, AtlasRasterPipeline } from './publish/contracts.js';
 import type { ExtrasMap, HasOptionalSrc, HasOptionalUrl } from './shared-types.js';
 import { createTransform, parseTextureSetMode, type TextureSetMode } from './utils.js';
 
@@ -90,6 +90,9 @@ export interface AtlasOptions {
 	 */
 	mkdir?: (path: string) => Promise<void>;
 
+	/** Writes encoded PNG bytes through the host output filesystem. */
+	writeFileRaw?: (path: string, data: Uint8Array) => Promise<void>;
+
 	/**
 	 * Optional raw file reader for reading .jta MovieClip files.
 	 * Required for MovieClip frame atlas packing.
@@ -123,7 +126,7 @@ export interface AtlasOptions {
 }
 
 const ATLAS_DEFAULTS: Required<
-	Omit<AtlasOptions, 'packages' | 'encoder' | 'basePath' | 'outputPath' | 'mkdir' | 'readFileRaw'>
+	Omit<AtlasOptions, 'packages' | 'encoder' | 'basePath' | 'outputPath' | 'mkdir' | 'readFileRaw' | 'writeFileRaw'>
 > = {
 	maxSize: 2048,
 	fast: true,
@@ -964,6 +967,11 @@ function attachSpritesToAtlas(
 	}
 }
 
+async function writeAtlasOutput(pipeline: AtlasRasterPipeline, outputFile: string, options: AtlasOptions): Promise<void> {
+	if (options.writeFileRaw) await options.writeFileRaw(outputFile, await pipeline.png().toBuffer());
+	else await pipeline.toFile(outputFile);
+}
+
 async function writeAtlasPageImage(
 	pkg: Package,
 	inputs: InputItem[],
@@ -1018,7 +1026,7 @@ async function writeAtlasPageImage(
 	}
 
 	const outputFile = `${options.outputPath}/${atlasFileName}`;
-	await encoder({
+	await writeAtlasOutput(encoder({
 		create: {
 			width: page.width,
 			height: page.height,
@@ -1026,8 +1034,7 @@ async function writeAtlasPageImage(
 			background: { r: 0, g: 0, b: 0, alpha: 0 },
 		},
 	})
-		.composite(compositeInputs)
-		.toFile(outputFile);
+		.composite(compositeInputs), outputFile, options);
 
 	logger.info(`atlas: Generated ${atlasFileName} (${page.width}x${page.height}, ${page.outputRects.length} sprites)`);
 }
@@ -1136,10 +1143,10 @@ async function emitDirectImageOutput(
 
 	try {
 		if (atlasSize.width === input.originalWidth && atlasSize.height === input.originalHeight) {
-			await encoder(filePath).png().toFile(outputFile);
+			await writeAtlasOutput(encoder(filePath).png(), outputFile, options);
 		} else {
 			const imageBuffer = await encoder(filePath).png().toBuffer();
-			await encoder({
+			await writeAtlasOutput(encoder({
 				create: {
 					width: atlasSize.width,
 					height: atlasSize.height,
@@ -1148,8 +1155,7 @@ async function emitDirectImageOutput(
 				},
 			})
 				.composite([{ input: imageBuffer, left: 0, top: 0 }])
-				.png()
-				.toFile(outputFile);
+				.png(), outputFile, options);
 		}
 	} catch {
 		const message = `atlas: Could not write direct-output atlas "${atlasFileName}".`;
