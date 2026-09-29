@@ -1,6 +1,7 @@
 import { XMLBuilder, XMLParser, XMLValidator } from 'fast-xml-parser';
 import { generateChildId } from '../utils/id-utils.js';
 import { inspectOpaqueProjectXml, findOpaqueProjectXmlReferences } from '../io/opaque-project-xml.js';
+import { PROJECT_XML_PROTOCOL, assertXmlAttrValue, type XmlNodeProtocol } from '../io/project-xml-protocol.js';
 import { DocumentEditError, type AuthoringTarget } from './document-edit.js';
 
 export interface XmlFragmentOperation {
@@ -42,6 +43,28 @@ const attrsOf = (entry: Entry) => (entry[':@'] ??= {}) as Record<string, string 
 const childrenOf = (entry: Entry) => entry[tagOf(entry)] as Entry[];
 const find = (entries: Entry[], tag: string, field?: string, value?: string) =>
 	entries.find((entry) => tagOf(entry) === tag && (!field || attrsOf(entry)[field] === value));
+
+function validateNativeGeometry(root: Entry): void {
+	const validate = (entry: Entry, protocol: XmlNodeProtocol): void => {
+		const attrs = attrsOf(entry);
+		for (const spec of Object.values(protocol.attrs)) {
+			try {
+				assertXmlAttrValue(spec, attrs[spec.canonical]);
+			} catch (error) {
+				if (!(error instanceof RangeError)) throw error;
+				throw new DocumentEditError('INVALID_XML', error.message,
+					`xml.${tagOf(entry)}${attrs.id ? `[${attrs.id}]` : ''}.@${spec.canonical}`, attrs[spec.canonical]);
+			}
+		}
+	};
+	validate(root, PROJECT_XML_PROTOCOL.componentRoot);
+	const displayList = find(childrenOf(root), 'displayList');
+	const variants = PROJECT_XML_PROTOCOL.componentRoot.containers!.displayList!.items;
+	for (const child of displayList ? childrenOf(displayList) : []) {
+		const protocol = variants[tagOf(child)];
+		if (protocol) validate(child, protocol);
+	}
+}
 
 function parse(xml: string, isFragment = true): Entry[] {
 	if (isFragment && new TextEncoder().encode(xml).byteLength > 1024 * 1024)
@@ -326,6 +349,7 @@ export function editComponentXml(
 		}
 	}
 	const updatedRoot = find(tree, 'component')!;
+	validateNativeGeometry(updatedRoot);
 	const updatedList = find(childrenOf(updatedRoot), 'displayList');
 	const numericIds = (updatedList ? childrenOf(updatedList) : [])
 		.map((entry) => /^n(\d+)$/.exec(String(attrsOf(entry).id ?? '')))

@@ -216,12 +216,19 @@ export function authoringPropertySchema(owner: Property): AuthoringJsonSchema {
 		if (['x', 'y', 'width', 'height', 'pivotX', 'pivotY'].includes(key))
 			properties[key]!.description = ['pivotX', 'pivotY'].includes(key)
 				? 'Normalized pivot coordinate.'
-				: 'Logical pixels.';
+				: 'Integer logical pixels (signed 32-bit).';
 	}
 	return object(properties, []);
 }
 
 function propertyConstraint(owner: Property, key: string): AuthoringJsonSchema {
+	if (['x', 'y', 'width', 'height', 'minWidth', 'maxWidth', 'minHeight', 'maxHeight'].includes(key))
+		return {
+			type: ['integer', 'null'],
+			minimum: key === 'x' || key === 'y' ? -2147483648 : 0,
+			maximum: 2147483647,
+			description: 'Integer logical pixels (signed 32-bit).',
+		};
 	const numericEnums: Record<string, number> = {
 		gearType: 9,
 		easeType: 31,

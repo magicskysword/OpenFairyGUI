@@ -1593,7 +1593,7 @@ export class ProjectWriter {
 		if (type === 'GComponent' && typedObj.getAspect?.()) {
 			writeXmlAttr(attrs, PROJECT_XML_PROTOCOL.componentInstance.attrs.aspect, 'true');
 		}
-		if (type === 'GComponent') {
+		if (type === 'GComponent' || EXTENSION_TYPE[type]) {
 			const [x, y] = [typedObj.getX?.() ?? 0, typedObj.getY?.() ?? 0];
 			writeXmlAttr(attrs, PROJECT_XML_PROTOCOL.componentInstance.attrs.xy, `${x},${y}`);
 			const [w, h] = [typedObj.getWidth?.() ?? 0, typedObj.getHeight?.() ?? 0];

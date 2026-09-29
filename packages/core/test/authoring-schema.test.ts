@@ -55,7 +55,7 @@ test('authoring contract requires explicit selector counts and XML payloads', (t
 
 test('property definitions use current native fields and reflect nullable values', (t) => {
 	const schema = authoringPropertySchema(new Document().createGTextField('text'));
-	t.deepEqual(schema.properties?.x?.type, ['number', 'null']);
+	t.deepEqual(schema.properties?.x?.type, ['integer', 'null']);
 	t.deepEqual(schema.properties?.text?.type, 'string');
 	t.is(schema.properties?.alpha?.maximum, 1);
 	t.is(schema.properties?.id, undefined);

@@ -2,6 +2,7 @@ export interface XmlAttrSpec {
 	canonical: string;
 	aliases?: readonly string[];
 	implemented?: boolean;
+	integerTupleLength?: number;
 }
 
 export interface XmlNodeProtocol {
@@ -114,8 +115,8 @@ const DISPLAY_OBJECT_IDENTITY_ATTRS = {
 } satisfies XmlAttrMap;
 
 const XY_SIZE_ATTRS = {
-	xy: { canonical: 'xy' },
-	size: { canonical: 'size' },
+	xy: { canonical: 'xy', integerTupleLength: 2 },
+	size: { canonical: 'size', integerTupleLength: 2 },
 } satisfies XmlAttrMap;
 
 const LOCKED_ATTRS = {
@@ -123,7 +124,7 @@ const LOCKED_ATTRS = {
 } satisfies XmlAttrMap;
 
 const RESTRICT_SIZE_ATTRS = {
-	restrictSize: { canonical: 'restrictSize' },
+	restrictSize: { canonical: 'restrictSize', integerTupleLength: 4 },
 } satisfies XmlAttrMap;
 
 const ASPECT_ATTRS = {
@@ -190,11 +191,11 @@ const FILTER_ATTRS = {
 } satisfies XmlAttrMap;
 
 const ROOT_COMPONENT_PANEL_ATTRS = {
-	size: { canonical: 'size' },
+	size: XY_SIZE_ATTRS.size,
 	pivot: { canonical: 'pivot' },
 	anchor: { canonical: 'anchor' },
 	margin: { canonical: 'margin' },
-	restrictSize: { canonical: 'restrictSize' },
+	restrictSize: RESTRICT_SIZE_ATTRS.restrictSize,
 	overflow: { canonical: 'overflow' },
 	clipSoftness: { canonical: 'clipSoftness' },
 	opaque: { canonical: 'opaque' },
@@ -331,7 +332,7 @@ const TEXT_INPUT_PANEL_ATTRS = {
 } satisfies XmlAttrMap;
 
 const RICH_TEXT_PANEL_ATTRS = {
-	restrictSize: { canonical: 'restrictSize' },
+	restrictSize: RESTRICT_SIZE_ATTRS.restrictSize,
 	underlaySoftness: { canonical: 'underlaySoftness' },
 } satisfies XmlAttrMap;
 
@@ -884,7 +885,19 @@ export function writeXmlAttr(
 	spec: XmlAttrSpec,
 	value: unknown,
 ): void {
+	assertXmlAttrValue(spec, value);
 	target[`@_${spec.canonical}`] = value;
+}
+
+export function assertXmlAttrValue(spec: XmlAttrSpec, value: unknown): void {
+	if (spec.integerTupleLength === undefined || value === undefined || value === null) return;
+	// The editor parses geometry with Int32.Parse, including coordinates that the runtime stores as floats.
+	const parts = String(value).split(',');
+	if (parts.length !== spec.integerTupleLength || parts.some((part) =>
+		!/^[-+]?\d+$/.test(part.trim()) || Number(part) < -2147483648 || Number(part) > 2147483647
+	)) {
+		throw new RangeError(`XML attribute ${spec.canonical} requires ${spec.integerTupleLength} signed 32-bit integers: ${value}`);
+	}
 }
 
 export function listXmlAttrNames(protocol: XmlNodeProtocol): string[] {
