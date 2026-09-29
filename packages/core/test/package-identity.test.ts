@@ -19,7 +19,7 @@ test('fork packages expose stable magicskysword names and semver dependencies', 
 		url: 'https://github.com/magicskysword/OpenFairyGUI/issues',
 	});
 	t.is(core.name, '@magicskysword/openfairygui-core');
-	t.is(core.version, '0.3.1');
+	t.is(core.version, '0.3.2');
 	t.is(functions.name, '@magicskysword/openfairygui-functions');
 	t.is(functions.version, '0.3.1');
 	t.is(
