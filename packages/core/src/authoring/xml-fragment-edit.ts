@@ -84,6 +84,13 @@ function parse(xml: string, isFragment = true): Entry[] {
 	return tree;
 }
 
+/** Checks the editor's integer geometry fields without coercing or rewriting source values. */
+export function assertComponentXmlGeometry(source: string): void {
+	const root = find(parse(source, false), 'component');
+	if (!root) throw new DocumentEditError('INVALID_XML', '组件 XML 缺少 component 根');
+	validateNativeGeometry(root);
+}
+
 function locate(root: Entry, target: AuthoringTarget): { entry: Entry; siblings: Entry[] } {
 	const children = childrenOf(root);
 	if (target.kind === 'component') return { entry: root, siblings: [root] };

@@ -1,5 +1,5 @@
 import test from 'ava';
-import { Document, serializeProjectFiles, setAuthoringProperties } from '../src/index.js';
+import { Document, assertComponentXmlGeometry, serializeProjectFiles, setAuthoringProperties } from '../src/index.js';
 import { authoringPropertySchema } from '../src/authoring/schema.js';
 import { editComponentXml } from '../src/authoring/xml-fragment-edit.js';
 
@@ -17,6 +17,13 @@ function fixture() {
 	pkg.addResource(component);
 	return { document, component };
 }
+
+test('native geometry validation checks raw XML values before numeric coercion', (t) => {
+	for (const xy of ['100.0,20', '1e2,20', 'NaN,20', '10,20,30', '2147483648,20'])
+		t.throws(() => assertComponentXmlGeometry(`<component><displayList><loader id="n0" xy="${xy}"/></displayList></component>`),
+			{ code: 'INVALID_XML' });
+	t.notThrows(() => assertComponentXmlGeometry('<component size="300,200"><displayList><loader id="n0" xy="-10,20" pivot="0.5,0.5"/></displayList></component>'));
+});
 
 for (const factory of factories) {
 	test(`${factory}: authoring and project output require integer geometry`, async (t) => {
