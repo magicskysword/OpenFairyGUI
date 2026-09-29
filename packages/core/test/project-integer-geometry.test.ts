@@ -25,6 +25,13 @@ test('native geometry validation checks raw XML values before numeric coercion',
 	t.notThrows(() => assertComponentXmlGeometry('<component size="300,200"><displayList><loader id="n0" xy="-10,20" pivot="0.5,0.5"/></displayList></component>'));
 });
 
+test('native geometry validation recognizes both loader3D source spellings', (t) => {
+	for (const tag of ['loader3d', 'loader3D']) {
+		t.throws(() => assertComponentXmlGeometry(`<component><displayList><${tag} id="n0" xy="0.5,20"/></displayList></component>`),
+			{ code: 'INVALID_XML' });
+	}
+});
+
 for (const factory of factories) {
 	test(`${factory}: authoring and project output require integer geometry`, async (t) => {
 		const { document, component } = fixture();

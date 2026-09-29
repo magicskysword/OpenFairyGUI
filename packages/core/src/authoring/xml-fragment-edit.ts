@@ -61,7 +61,8 @@ function validateNativeGeometry(root: Entry): void {
 	const displayList = find(childrenOf(root), 'displayList');
 	const variants = PROJECT_XML_PROTOCOL.componentRoot.containers!.displayList!.items;
 	for (const child of displayList ? childrenOf(displayList) : []) {
-		const protocol = variants[tagOf(child)];
+		const tag = tagOf(child);
+		const protocol = variants[tag === 'loader3d' ? 'loader3D' : tag];
 		if (protocol) validate(child, protocol);
 	}
 }
