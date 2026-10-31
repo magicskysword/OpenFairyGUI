@@ -188,6 +188,27 @@ export function editComponentXml(
 		);
 		const labels = new Set<string>();
 		const replacingRoot = operation.action === 'replace' && operation.target.kind === 'component';
+		const retainedIds = new Map<string, string>();
+		if (replacingRoot) {
+			const list = find(childrenOf(entries[0]!), 'displayList');
+			const replacementLabels = (list ? childrenOf(list) : [])
+				.filter((entry) => displayTags.has(tagOf(entry)))
+				.map((entry) => String(attrsOf(entry).id ?? ''));
+			// Exact source IDs take precedence over component-qualified aliases.
+			for (const label of replacementLabels) {
+				if (existingIds.has(label)) retainedIds.set(label, label);
+			}
+			const retained = new Set(retainedIds.values());
+			const prefix = operation.target.componentId ? `${operation.target.componentId}_` : '';
+			for (const label of replacementLabels) {
+				if (!prefix || !label.startsWith(prefix) || retainedIds.has(label)) continue;
+				const localId = label.slice(prefix.length);
+				if (existingIds.has(localId) && !retained.has(localId)) {
+					retainedIds.set(label, localId);
+					retained.add(localId);
+				}
+			}
+		}
 		const allocate = (entry: Entry, display: boolean) => {
 			if (!display) return;
 			const label = String(attrsOf(entry).id ?? '');
@@ -197,9 +218,7 @@ export function editComponentXml(
 			const id =
 				operation.action === 'replace' && operation.target.kind === 'node'
 					? operation.target.nodeId!
-					: replacingRoot && existingIds.has(label)
-						? label
-						: generateChildId(existingIds);
+					: retainedIds.get(label) ?? generateChildId(existingIds);
 			existingIds.add(id);
 			if (label) idMap[label] = id;
 			attrsOf(entry).id = id;

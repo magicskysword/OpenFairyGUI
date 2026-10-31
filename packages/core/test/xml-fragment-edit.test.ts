@@ -129,6 +129,49 @@ test('component replacement retains existing node identities and allocates new n
 	t.is(result.idMap.new, 'n4');
 	t.true(result.xml.includes('target="n4"'));
 });
+
+test('component-qualified XML labels retain existing local IDs and references', (t) => {
+	const componentTarget = { ...target, componentId: 'pb2srag5' };
+	const original = '<component size="351,60" mask="n6_nkiv"><displayList><loader id="n1_nkiv" name="bg" group="n7_nkiv"><relation target="n6_nkiv" sidePair="width-width"/></loader><graph id="n6_nkiv" name="light"/><group id="n7_nkiv" name="camp_flag"/></displayList><transition name="show"><item type="Rotation" target="n1_nkiv" time="0"/></transition></component>';
+	let replacement = original.replace('351,60', '362,56');
+	for (const id of ['n1_nkiv', 'n6_nkiv', 'n7_nkiv']) {
+		replacement = replacement.replaceAll(id, `${componentTarget.componentId}_${id}`);
+	}
+	replacement = replacement.replace('</displayList>', '<text id="pb2srag5_n12_wu83" name="title" text="pb2srag5_n1_nkiv"/></displayList>');
+	const result = editComponentXml(original, { op: 'xml', action: 'replace', target: componentTarget, xml: replacement });
+	t.deepEqual(result.idMap, {
+		pb2srag5_n1_nkiv: 'n1_nkiv',
+		pb2srag5_n6_nkiv: 'n6_nkiv',
+		pb2srag5_n7_nkiv: 'n7_nkiv',
+		pb2srag5_n12_wu83: 'n0',
+	});
+	t.true(result.xml.includes('id="n1_nkiv"'));
+	t.true(result.xml.includes('group="n7_nkiv"'));
+	t.true(result.xml.includes('mask="n6_nkiv"'));
+	t.true(result.xml.includes('target="n6_nkiv"'));
+	t.true(result.xml.includes('target="n1_nkiv"'));
+	t.true(result.xml.includes('text="pb2srag5_n1_nkiv"'));
+});
+
+test('component replacement allocates distinct IDs when a new label matches an allocated ID', (t) => {
+	const result = editComponentXml(source, {
+		op: 'xml', action: 'replace', target,
+		xml: '<component><displayList><graph id="fresh"/><graph id="n4"/><text id="n3"/></displayList><transition name="show"><item type="Rotation" target="n4" time="0"/></transition></component>',
+	});
+	t.deepEqual(result.idMap, { fresh: 'n4', n4: 'n5', n3: 'n3' });
+	t.true(result.xml.includes('target="n5"'));
+});
+
+test('component replacement preserves exact source IDs before resolving qualified labels', (t) => {
+	const original = '<component><displayList><text id="n3"/><text id="panel_n3"/></displayList></component>';
+	const result = editComponentXml(original, { op: 'xml', action: 'replace', target, xml: original });
+	t.deepEqual(result.idMap, { n3: 'n3', panel_n3: 'panel_n3' });
+	const mixed = editComponentXml(source, {
+		op: 'xml', action: 'replace', target,
+		xml: '<component><displayList><graph id="panel_n3"/><text id="n3"/></displayList></component>',
+	});
+	t.deepEqual(mixed.idMap, { panel_n3: 'n4', n3: 'n3' });
+});
 import { readComponentXmlFragment } from '../src/index.js';
 
 test('native XML reads return only the explicitly selected structure', (t) => {
