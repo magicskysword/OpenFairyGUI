@@ -2320,6 +2320,8 @@ export class ProjectReader {
 				if (loaderGrayed !== undefined) g.setGrayed(parseBool(loaderGrayed));
 				const loaderVisible = readXmlAttr<string | boolean>(attrs, PROJECT_XML_PROTOCOL.loader.attrs.visible);
 				if (loaderVisible !== undefined) g.setVisible(parseBool(loaderVisible));
+				const loaderGroup = readXmlAttr<string>(attrs, PROJECT_XML_PROTOCOL.loader.attrs.group);
+				if (loaderGroup) g.setGroup(loaderGroup);
 				const loaderUrl = readXmlAttr<string>(attrs, PROJECT_XML_PROTOCOL.loader.attrs.url);
 				if (loaderUrl) g.setUrl(loaderUrl);
 				const loaderAlign = readXmlAttr<string>(attrs, PROJECT_XML_PROTOCOL.loader.attrs.align);

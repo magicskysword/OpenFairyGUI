@@ -16,6 +16,7 @@ export interface IGLoader extends IGObject {
 	visible: boolean;
 	touchable: boolean;
 	grayed: boolean;
+	group: string;
 	url: string;
 	filter: string;
 	filterData: string;
@@ -62,6 +63,7 @@ export class GLoader extends GObject<IGLoader, PropertyType.G_LOADER> {
 			visible: true,
 			touchable: true,
 			grayed: false,
+			group: '',
 			url: '',
 			filter: '',
 			filterData: '',
@@ -84,6 +86,9 @@ export class GLoader extends GObject<IGLoader, PropertyType.G_LOADER> {
 
 	public getUrl(): string { return this.get('url'); }
 	public setUrl(v: string): this { return this.set('url', v); }
+
+	public getGroup(): string { return this.get('group'); }
+	public setGroup(v: string): this { return this.set('group', v); }
 
 	public getFilter(): string { return this.get('filter'); }
 	public setFilter(v: string): this { return this.set('filter', v); }

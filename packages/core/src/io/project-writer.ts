@@ -1729,6 +1729,7 @@ export class ProjectWriter {
 			if (typedObj.getLocked?.()) writeXmlAttr(attrs, PROJECT_XML_PROTOCOL.group.attrs.locked, 'true');
 		}
 		if (type === 'GLoader') {
+			if (typedObj.getGroup?.()) writeXmlAttr(attrs, PROJECT_XML_PROTOCOL.loader.attrs.group, typedObj.getGroup());
 			const [x, y] = [typedObj.getX?.() ?? 0, typedObj.getY?.() ?? 0];
 			writeXmlAttr(attrs, PROJECT_XML_PROTOCOL.loader.attrs.xy, `${x},${y}`);
 			const [w, h] = [typedObj.getWidth?.() ?? 0, typedObj.getHeight?.() ?? 0];
